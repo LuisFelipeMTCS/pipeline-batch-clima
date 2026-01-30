@@ -1,0 +1,26 @@
+﻿# Logs e arquivos temporários
+logs/
+__pycache__/
+*.pyc
+*.log
+*.tmp
+
+# Credenciais e variáveis de ambiente
+.env
+*.pem
+*.json
+keys/
+dags/utils/credentials.json
+
+# Docker
+*.pid
+docker-compose.override.yml
+
+# Airflow
+airflow.db
+airflow.cfg
+unittests.cfg
+
+# Volumes e dados locais
+data/
+tmp/
