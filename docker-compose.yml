@@ -1,4 +1,6 @@
-﻿services:
+﻿version: "3"
+
+services:
   postgres:
     image: postgres:13
     environment:
@@ -14,7 +16,7 @@
       - postgres
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/keys/credentials.json
@@ -25,3 +27,4 @@
       - ./keys:/opt/airflow/keys
     ports:
       - "9090:8080"
+    command: webserver
