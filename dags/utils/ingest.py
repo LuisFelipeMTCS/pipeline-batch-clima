@@ -3,28 +3,37 @@ import pandas as pd
 import logging
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+import boto3
+import tempfile
+from dotenv import load_dotenv
+
+# Carrega variáveis do .env
+load_dotenv()
 
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 FOLDER_ID = os.getenv("FOLDER_ID")
-
-logger = logging.getLogger("airflow.task")
+logger = logging.getLogger("local.test")
 
 def authenticate_drive():
+    creds_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../keys/credentials.json'))
     creds = service_account.Credentials.from_service_account_file(
-        os.path.join(os.path.dirname(__file__), '../../keys/credentials.json')
+        creds_path,
         scopes=SCOPES
     )
     return build('drive', 'v3', credentials=creds)
 
 def list_csv_files(service, folder_id):
+    if not folder_id:
+        raise ValueError("FOLDER_ID não definido. Configure no .env")
     query = f"'{folder_id}' in parents and name contains '.csv'"
     results = service.files().list(q=query, pageSize=1000, fields="files(id, name)").execute()
     return results.get('files', [])
 
 def download_csv(service, file_id, filename):
     request = service.files().get_media(fileId=file_id)
-    filepath = os.path.join("/tmp", filename)
+    tmp_dir = tempfile.gettempdir()
+    filepath = os.path.join(tmp_dir, filename)
+    os.makedirs(tmp_dir, exist_ok=True)
     with open(filepath, "wb") as f:
         f.write(request.execute())
     return filepath
@@ -37,38 +46,45 @@ def ingest_data():
         logger.info("Nenhum arquivo encontrado no Drive.")
         return "Nenhum arquivo encontrado."
 
-    total = 0
-    for file in files:
+    s3 = boto3.client("s3")
+    total_arquivos = 0
+    total_linhas = 0
+    tmp_dir = tempfile.gettempdir()
+
+    for i, file in enumerate(files): 
         logger.info(f"Baixando: {file['name']}")
         path = download_csv(service, file['id'], file['name'])
 
         try:
-            df = pd.read_csv(
-                path,
-                sep=None,
-                engine="python",
-                encoding="latin1",
-                skiprows=8,
-                on_bad_lines="skip"
-            )
+            df = pd.read_csv(path, sep=None, engine="python", encoding="latin1", skiprows=8, on_bad_lines="skip")
+            linhas = len(df)
+            total_linhas += linhas
 
-            original_name = os.path.splitext(file['name'])[0] + ".parquet"
-            parquet_path = f"/tmp/{original_name}"
-
+            parquet_name = f"{os.path.splitext(file['name'])[0]}.parquet"
+            parquet_path = os.path.join(tmp_dir, parquet_name)
             df.to_parquet(parquet_path, engine="pyarrow", index=False)
-            logger.info(f"Parquet gerado em: {parquet_path}")
 
-            s3 = S3Hook(aws_conn_id="aws_default")
-            s3.load_file(
-                filename=parquet_path,
-                key=f"bronze/inmet/2025/{original_name}",
-                bucket_name="datalake-lab1",
-                replace=True
-            )
-            logger.info(f"Upload para S3 concluído: bronze/inmet/2025/{original_name}")
-            total += 1
-
+            s3.upload_file(parquet_path, "datalake-lab1", f"bronze/inmet/year/2025/{parquet_name}")
+            logger.info(f"Upload concluído: bronze/inmet/year/2025/{parquet_name} ({linhas} linhas)")
+            total_arquivos += 1
         except Exception as e:
             logger.error(f"Erro ao processar {file['name']}: {e}")
 
-    return f"{total} arquivos processados e enviados para S3"
+    # Log final com resumo
+    resumo = f"{total_arquivos} arquivos processados, {total_linhas} linhas enviadas para S3"
+    logger.info(resumo)
+
+    # Opcional: enviar métricas para CloudWatch
+    cloudwatch = boto3.client("cloudwatch")
+    cloudwatch.put_metric_data(
+        Namespace="DataLake/Ingestao",
+        MetricData=[
+            {"MetricName": "ArquivosIngeridos", "Value": total_arquivos, "Unit": "Count"},
+            {"MetricName": "LinhasIngeridas", "Value": total_linhas, "Unit": "Count"}
+        ]
+    )
+
+    return resumo
+
+if __name__ == "__main__":
+    print(ingest_data())
