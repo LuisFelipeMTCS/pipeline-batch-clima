@@ -1,25 +1,64 @@
-﻿version: "3"
-
-services:
+﻿services:
   postgres:
     image: postgres:13
     environment:
-      - POSTGRES_USER=airflow
-      - POSTGRES_PASSWORD=airflow
-      - POSTGRES_DB=airflow
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
 
-  airflow-webserver:
-    image: apache/airflow:2.7.0
+  airflow-init:
+    build: .
+    user: "0:0"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     env_file:
       - .env
     environment:
-      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
-      - GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/keys/credentials.json
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__LOGGING__REMOTE_LOGGING: "false"
+      GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/keys/credentials.json
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./keys:/opt/airflow/keys
+    command: >
+      bash -c "
+      airflow db migrate &&
+      airflow users create
+        --username airflow
+        --password airflow
+        --firstname Admin
+        --lastname User
+        --role Admin
+        --email admin@example.com || true
+      "
+
+  airflow-webserver:
+    build: .
+    user: "0:0"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__LOGGING__REMOTE_LOGGING: "false"
+      AIRFLOW__WEBSERVER__BASE_URL: http://localhost:9090
+      GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/keys/credentials.json
     volumes:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
@@ -28,20 +67,26 @@ services:
     ports:
       - "9090:8080"
     command: webserver
+    restart: unless-stopped
 
   airflow-scheduler:
-    image: apache/airflow:2.7.0
+    build: .
+    user: "0:0"
     depends_on:
-      - postgres
+      airflow-init:
+        condition: service_completed_successfully
     env_file:
       - .env
     environment:
-      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
-      - GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/keys/credentials.json
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__LOGGING__REMOTE_LOGGING: "false"
+      GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/keys/credentials.json
     volumes:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
       - ./keys:/opt/airflow/keys
     command: scheduler
+    restart: unless-stopped
