@@ -32,6 +32,7 @@
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
       - ./keys:/opt/airflow/keys
+      - ./tmp_ingest:/opt/airflow/tmp_ingest
     command: >
       bash -c "
       airflow db migrate &&
@@ -64,6 +65,7 @@
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
       - ./keys:/opt/airflow/keys
+      - ./tmp_ingest:/opt/airflow/tmp_ingest 
     ports:
       - "9090:8080"
     command: webserver
@@ -88,5 +90,6 @@
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
       - ./keys:/opt/airflow/keys
+      - ./tmp_ingest:/opt/airflow/tmp_ingest      
     command: scheduler
     restart: unless-stopped

@@ -24,3 +24,9 @@ unittests.cfg
 # Volumes e dados locais
 data/
 tmp/
+logs/
+tmp_ingest/
+
+# IDE
+.idea/
+.vscode/

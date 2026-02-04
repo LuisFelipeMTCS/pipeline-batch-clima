@@ -63,6 +63,20 @@ CREDENTIALS_PATH = Path(os.getenv(
 ))
 
 # =========================
+# DIRETÓRIO TEMPORÁRIO PERSISTENTE
+# =========================
+# No Docker/Airflow usa diretório persistente montado via volume
+# Local usa temp padrão do sistema
+
+if os.environ.get("AIRFLOW_HOME"):
+    # Rodando no Airflow (Docker) - usa diretório persistente
+    TEMP_DIR = "/opt/airflow/tmp_ingest"
+    os.makedirs(TEMP_DIR, exist_ok=True)
+else:
+    # Rodando local - usa temp padrão
+    TEMP_DIR = tempfile.gettempdir()
+
+# =========================
 # SSL FIX PARA WINDOWS
 # =========================
 
@@ -537,11 +551,14 @@ def list_csv_files(folder_id: str) -> List[Dict]:
     return files
 
 
-def download_csv_with_retry(file_id: str, filename: str, max_retries: int = 3) -> str:
-    """Download com retry, backoff exponencial e tratamento de rate limit."""
-    tmp_dir = tempfile.gettempdir()
+def download_csv_with_retry(file_id: str, filename: str, max_retries: int = 5) -> str:
+    """
+    Download com retry, backoff exponencial e tratamento de rate limit.
+    Usa TEMP_DIR persistente (não /tmp volátil do Docker).
+    """
+    # USA TEMP_DIR PERSISTENTE em vez de tempfile.gettempdir()
     safe_filename = f"{file_id}_{filename.replace(' ', '_')}"
-    filepath = os.path.join(tmp_dir, safe_filename)
+    filepath = os.path.join(TEMP_DIR, safe_filename)
     
     last_error = None
     
@@ -563,7 +580,7 @@ def download_csv_with_retry(file_id: str, filename: str, max_retries: int = 3) -
             # Rate limit (429) ou erro de servidor (5xx)
             if e.resp.status in [429, 500, 502, 503]:
                 wait_time = min(2 ** (attempt + 2), 60)  # 4s, 8s, 16s... max 60s
-                logging.warning(f"Rate limit/Server error. Aguardando {wait_time}s...")
+                logging.warning(f"Rate limit/Server error (tentativa {attempt+1}/{max_retries}). Aguardando {wait_time}s...")
                 time.sleep(wait_time)
                 reset_thread_local()
             else:
@@ -571,14 +588,17 @@ def download_csv_with_retry(file_id: str, filename: str, max_retries: int = 3) -
                 
         except (ssl.SSLError, socket.timeout, ConnectionError) as e:
             last_error = e
-            wait_time = 2 ** attempt
+            wait_time = 2 ** (attempt + 1)
+            logging.warning(f"Erro de conexão (tentativa {attempt+1}/{max_retries}): {e}. Aguardando {wait_time}s...")
             reset_thread_local()
             time.sleep(wait_time)
             
         except Exception as e:
             last_error = e
             if attempt < max_retries - 1:
-                time.sleep(1)
+                wait_time = 2 ** attempt
+                logging.warning(f"Erro (tentativa {attempt+1}/{max_retries}): {e}. Aguardando {wait_time}s...")
+                time.sleep(wait_time)
             else:
                 raise
     
@@ -625,7 +645,8 @@ def process_single_file(file_info: Dict, year_name: str) -> Dict:
             
             base_name = os.path.splitext(filename)[0]
             parquet_name = f"{base_name}.parquet"
-            parquet_path = os.path.join(tempfile.gettempdir(), f"{file_id}_{parquet_name}")
+            # USA TEMP_DIR PERSISTENTE em vez de tempfile.gettempdir()
+            parquet_path = os.path.join(TEMP_DIR, f"{file_id}_{parquet_name}")
             df.to_parquet(parquet_path, engine="pyarrow", index=False)
         result["time_transform"] = t()
         
@@ -686,6 +707,7 @@ def ingest_data(
     cw_logs.info("=" * 60)
     cw_logs.info("INICIANDO INGESTÃO INMET")
     cw_logs.info(f"Workers: {max_workers} | Bucket: {BUCKET_NAME} | Região: {AWS_REGION}")
+    cw_logs.info(f"Diretório temporário: {TEMP_DIR}")
     cw_logs.info(f"SNS configurado: {'Sim' if alerts.is_configured() else 'Não'}")
     if year_filter:
         cw_logs.info(f"Filtro de ano: {year_filter}")
