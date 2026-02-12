@@ -3,7 +3,7 @@ Pipeline de Ingestão - CLIMA (INMET)
 ====================================
 
 Fonte: Google Drive (CSVs do INMET)
-Destino: S3 Bronze (Parquet)
+Destino: S3 raw (Parquet)
 
 Este arquivo contém APENAS a lógica específica do INMET:
 - Conexão com Google Drive
@@ -45,12 +45,12 @@ from src.ingestion.engine import (
 # =========================
 
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
-FOLDER_ID = os.getenv("FOLDER_ID")
+FOLDER_ID = os.getenv("FOLDER_ID_CLIMA")
 BUCKET_NAME = os.getenv("BUCKET_NAME", "datalake-lab1")
 
 # CloudWatch/SNS (específico deste pipeline)
-LOG_GROUP_NAME = os.getenv("LOG_GROUP_NAME", "/inmet/ingestao/bronze")
-METRIC_NAMESPACE = os.getenv("METRIC_NAMESPACE", "inmet_bronze")
+LOG_GROUP_NAME = os.getenv("LOG_GROUP_NAME", "/inmet/ingestao/raw")
+METRIC_NAMESPACE_CLIMA = os.getenv("METRIC_NAMESPACE_CLIMA", "inmet_raw")
 SNS_TOPIC_ARN = os.getenv("SNS_ALERT_TOPIC_ARN", "")
 
 # Performance
@@ -314,7 +314,7 @@ class GoogleDriveSource(DataSource):
             # Upload: S3
             start = time.perf_counter()
             s3 = _get_s3_client()
-            s3_key = f"bronze/clima/year={year}/{parquet_name}"
+            s3_key = f"raw/clima/year={year}/{parquet_name}"
             s3.upload_file(parquet_path, BUCKET_NAME, s3_key)
             result["time_upload"] = time.perf_counter() - start
             
@@ -373,14 +373,14 @@ def ingest_data(
     config = IngestionConfig(
         pipeline_name="INMET Clima",
         log_group=LOG_GROUP_NAME,
-        metric_namespace=METRIC_NAMESPACE,
+        metric_namespace=METRIC_NAMESPACE_CLIMA, 
         sns_topic_arn=SNS_TOPIC_ARN,
         max_workers=max_workers,
         send_metrics=send_metrics,
         send_success_alert=send_success_alert,
         send_error_alert=send_error_alert,
     )
-    
+
     # Cria source e engine
     source = GoogleDriveSource(year_filter=year_filter)
     engine = IngestionEngine(config)

@@ -409,8 +409,8 @@ class IngestionEngine:
     Uso:
         config = IngestionConfig(
             pipeline_name="INMET Clima",
-            log_group="/inmet/ingestao/bronze",
-            metric_namespace="inmet_bronze"
+            log_group="/inmet/ingestao/raw",
+            metric_namespace="inmet_raw"
         )
         
         engine = IngestionEngine(config)
