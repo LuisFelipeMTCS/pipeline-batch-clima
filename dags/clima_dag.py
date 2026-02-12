@@ -12,10 +12,18 @@ with DAG(
     start_date=datetime(2024, 1, 1),
     schedule_interval="@daily",
     catchup=False,
-    tags=["clima", "clima"],
+    tags=["clima", "inmet"],
+    params={"year_filter": None, "max_workers": 10},
 ) as dag:
 
-    ingest_task = PythonOperator(
+    def run_ingest(**context):
+        p = context["params"]
+        return ingest_data(
+            year_filter=p.get("year_filter"),
+            max_workers=p.get("max_workers", 10),
+        )
+
+    PythonOperator(
         task_id="ingest_clima",
-        python_callable=ingest_data,
+        python_callable=run_ingest,
     )
