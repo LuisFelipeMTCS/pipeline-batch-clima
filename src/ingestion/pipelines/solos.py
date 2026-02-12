@@ -1,18 +1,9 @@
 """
-Pipeline de Ingestão - solos (Solos)
-====================================
+Pipeline de Ingestão - SOLOS
+============================
 
-Fonte: Google Drive (CSVs do Solos)
-Destino: S3 raw (Parquet)
-
-Este arquivo contém APENAS a lógica específica do Solos:
-- Conexão com Google Drive
-- Listagem de pastas por ano
-- Download de CSVs
-- Conversão CSV → Parquet
-- Upload para S3
-
-A lógica genérica (logs, métricas, alertas, paralelismo) está em engine.py
+Fonte: Google Drive (CSVs de Solos)
+Destino: S3 Raw (Parquet)
 """
 
 import os
@@ -41,16 +32,16 @@ from src.ingestion.engine import (
 )
 
 # =========================
-# CONFIG ESPECÍFICA solos
+# CONFIG ESPECÍFICA SOLOS
 # =========================
 
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 FOLDER_ID = os.getenv("FOLDER_ID_SOLOS")
 BUCKET_NAME = os.getenv("BUCKET_NAME", "datalake-lab1")
 
-# CloudWatch/SNS (específico deste pipeline)
-LOG_GROUP_NAME = os.getenv("LOG_GROUP_NAME", "/Solos/ingestao/raw")
-METRIC_NAMESPACE_SOLOS = os.getenv("METRIC_NAMESPACE_SOLOS", "Solos_raw")
+# CloudWatch/SNS
+LOG_GROUP_NAME = os.getenv("LOG_GROUP_NAME", "/ingestao/raw")
+METRIC_NAMESPACE_SOLOS = os.getenv("METRIC_NAMESPACE_SOLOS", "solos_bronze")
 SNS_TOPIC_ARN = os.getenv("SNS_ALERT_TOPIC_ARN", "")
 
 # Performance
@@ -131,46 +122,34 @@ def _reset_thread_local():
 
 class GoogleDriveSource(DataSource):
     """
-    Fonte de dados: Google Drive com CSVs do Solos.
+    Fonte de dados: Google Drive com CSVs de Solos.
     
     Estrutura esperada no Drive:
-        FOLDER_ID/
+        FOLDER_ID_SOLOS/
         ├── 2020/
-        │   ├── estacao1.csv
-        │   └── estacao2.csv
-        ├── 2021/
-        │   └── ...
-        └── 2022/
+        │   ├── amostra1.csv
+        │   └── amostra2.csv
+        └── 2021/
             └── ...
     """
     
     def __init__(self, year_filter: Optional[str] = None):
-        """
-        Args:
-            year_filter: Processa apenas este ano (ex: "2023")
-        """
         self.year_filter = year_filter
         self.folder_id = FOLDER_ID
     
     def connect(self) -> None:
-        """Valida credenciais e conexão."""
         if not self.folder_id:
-            raise ValueError("FOLDER_ID não configurado no .env")
+            raise ValueError("FOLDER_ID_SOLOS não configurado no .env")
         _get_credentials()
         _get_drive_service()
     
     def list_files(self) -> List[Dict[str, Any]]:
-        """Lista todos os CSVs organizados por ano."""
         service = _get_drive_service()
-        
-        # 1. Lista pastas de ano
         year_folders = self._list_year_folders(service)
         
-        # 2. Aplica filtro se houver
         if self.year_filter:
             year_folders = [f for f in year_folders if f["name"] == self.year_filter]
         
-        # 3. Lista CSVs em cada pasta
         all_files = []
         for folder in year_folders:
             year = folder["name"]
@@ -190,7 +169,6 @@ class GoogleDriveSource(DataSource):
         return all_files
     
     def _list_year_folders(self, service) -> List[Dict]:
-        """Lista pastas de ano no Drive."""
         query = f"'{self.folder_id}' in parents and mimeType='application/vnd.google-apps.folder'"
         folders = []
         page_token = None
@@ -209,7 +187,6 @@ class GoogleDriveSource(DataSource):
         return sorted(folders, key=lambda x: x["name"])
     
     def _list_csv_files(self, service, folder_id: str) -> List[Dict]:
-        """Lista CSVs em uma pasta."""
         query = f"'{folder_id}' in parents and name contains '.csv'"
         files = []
         page_token = None
@@ -228,7 +205,6 @@ class GoogleDriveSource(DataSource):
         return files
     
     def download_file(self, file_info: Dict) -> str:
-        """Baixa CSV do Drive com retry."""
         file_id = file_info["id"]
         filename = file_info["name"]
         
@@ -292,7 +268,6 @@ class GoogleDriveSource(DataSource):
             year = file_info["metadata"]["year"]
             filename = file_info["name"]
             
-            # Transform: CSV → Parquet
             start = time.perf_counter()
             
             df = pd.read_csv(
@@ -311,7 +286,6 @@ class GoogleDriveSource(DataSource):
             df.to_parquet(parquet_path, engine="pyarrow", index=False)
             result["time_transform"] = time.perf_counter() - start
             
-            # Upload: S3
             start = time.perf_counter()
             s3 = _get_s3_client()
             s3_key = f"raw/solos/year={year}/{parquet_name}"
@@ -324,7 +298,6 @@ class GoogleDriveSource(DataSource):
             result["error"] = str(e)
             
         finally:
-            # Cleanup parquet temp
             if parquet_path and os.path.exists(parquet_path):
                 try:
                     os.remove(parquet_path)
@@ -346,7 +319,7 @@ def ingest_data(
     send_error_alert: bool = True,
 ) -> str:
     """
-    Executa ingestão de dados climáticos do Solos.
+    Executa ingestão de dados de Solos.
     
     Args:
         max_workers: Threads paralelas para download
@@ -357,23 +330,11 @@ def ingest_data(
     
     Returns:
         String com resumo: "X sucesso | Y erros | Zs"
-    
-    Exemplo:
-        # Processa todos os anos
-        ingest_data()
-        
-        # Processa só 2023
-        ingest_data(year_filter="2023")
-        
-        # Mais rápido, 20 threads
-        ingest_data(max_workers=20)
     """
-    
-    # Configura a engine
     config = IngestionConfig(
-        pipeline_name="Solos solos",
+        pipeline_name="Solos",
         log_group=LOG_GROUP_NAME,
-        metric_namespace_solos=METRIC_NAMESPACE_SOLOS,
+        metric_namespace=METRIC_NAMESPACE_SOLOS,
         sns_topic_arn=SNS_TOPIC_ARN,
         max_workers=max_workers,
         send_metrics=send_metrics,
@@ -381,17 +342,11 @@ def ingest_data(
         send_error_alert=send_error_alert,
     )
     
-    # Cria source e engine
     source = GoogleDriveSource(year_filter=year_filter)
     engine = IngestionEngine(config)
     
-    # Executa
     return engine.run(source)
 
-
-# =========================
-# ENTRY POINT
-# =========================
 
 if __name__ == "__main__":
     import sys
