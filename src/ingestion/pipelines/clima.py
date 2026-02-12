@@ -34,7 +34,11 @@ from googleapiclient.errors import HttpError
 # CONFIG
 # =========================
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
+# Detecta se está no Docker/Airflow
+if os.environ.get("AIRFLOW_HOME"):
+    PROJECT_ROOT = Path("/opt/airflow")
+else:
+    PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']

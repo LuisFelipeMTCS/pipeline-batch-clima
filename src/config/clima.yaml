@@ -1,0 +1,3 @@
+pipeline:
+  name: clima
+  description: Pipeline de dados climáticos INMET

@@ -1,0 +1,11 @@
+pipeline_clima:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: localhost
+      port: 5432
+      user: airflow
+      password: airflow
+      dbname: datalake
+      schema: analytics
