@@ -145,29 +145,48 @@ class GoogleDriveSource(DataSource):
     
     def list_files(self) -> List[Dict[str, Any]]:
         service = _get_drive_service()
+        
+        # Tenta listar pastas de ano primeiro
         year_folders = self._list_year_folders(service)
         
-        if self.year_filter:
-            year_folders = [f for f in year_folders if f["name"] == self.year_filter]
-        
         all_files = []
-        for folder in year_folders:
-            year = folder["name"]
-            csvs = self._list_csv_files(service, folder["id"])
+        
+        if year_folders:
+            # Estrutura com pastas de ano
+            if self.year_filter:
+                year_folders = [f for f in year_folders if f["name"] == self.year_filter]
+            
+            for folder in year_folders:
+                year = folder["name"]
+                csvs = self._list_csv_files(service, folder["id"])
+                
+                for csv_file in csvs:
+                    all_files.append({
+                        "id": csv_file["id"],
+                        "name": csv_file["name"],
+                        "metadata": {
+                            "year": year,
+                            "size": int(csv_file.get("size", 0)),
+                            "folder_id": folder["id"],
+                        }
+                    })
+        else:
+            # Arquivos direto na raiz (sem pastas de ano)
+            csvs = self._list_csv_files(service, self.folder_id)
             
             for csv_file in csvs:
                 all_files.append({
                     "id": csv_file["id"],
                     "name": csv_file["name"],
                     "metadata": {
-                        "year": year,
+                        "year": "raw",  # Usa "raw" como partição
                         "size": int(csv_file.get("size", 0)),
-                        "folder_id": folder["id"],
+                        "folder_id": self.folder_id,
                     }
                 })
         
         return all_files
-    
+
     def _list_year_folders(self, service) -> List[Dict]:
         query = f"'{self.folder_id}' in parents and mimeType='application/vnd.google-apps.folder'"
         folders = []
