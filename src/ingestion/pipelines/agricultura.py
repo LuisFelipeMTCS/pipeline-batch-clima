@@ -41,7 +41,7 @@ FOLDER_ID = os.getenv("FOLDER_ID_AGRICULTURA")
 BUCKET_NAME = os.getenv("BUCKET_NAME", "datalake-lab1")
 
 # CloudWatch/SNS
-LOG_GROUP_NAME = os.getenv("LOG_GROUP_NAME", "/ingestao/raw")
+LOG_GROUP_NAME = os.getenv("LOG_GROUP_NAME_AGRICULTURA", "/ingestao/raw")
 METRIC_NAMESPACE_AGRICULTURA = os.getenv("METRIC_NAMESPACE_AGRICULTURA", "agricultura_bronze")
 SNS_TOPIC_ARN = os.getenv("SNS_ALERT_TOPIC_ARN", "")
 
