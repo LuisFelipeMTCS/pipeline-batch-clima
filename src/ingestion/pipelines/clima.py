@@ -39,6 +39,7 @@ from src.ingestion.engine import (
     PROJECT_ROOT,
     AWS_REGION,
 )
+from src.validation.pipelines.clima import validate_dataframe
 
 # =========================
 # CONFIG ESPECÍFICA CLIMA
@@ -283,7 +284,9 @@ class GoogleDriveSource(DataSource):
             "bytes": file_info["metadata"].get("size", 0),
             "time_transform": 0,
             "time_upload": 0,
+            "time_validation": 0,
             "error": None,
+            "validation_warnings": 0,
         }
         
         parquet_path = None
@@ -292,7 +295,7 @@ class GoogleDriveSource(DataSource):
             year = file_info["metadata"]["year"]
             filename = file_info["name"]
             
-            # Transform: CSV → Parquet
+            # 1. Transform: CSV → DataFrame
             start = time.perf_counter()
             
             df = pd.read_csv(
@@ -304,6 +307,20 @@ class GoogleDriveSource(DataSource):
             )
             result["rows"] = len(df)
             
+            # 2. VALIDAÇÃO
+            start_validation = time.perf_counter()
+            validation_result = validate_dataframe(df, fail_on_error=False)
+            result["time_validation"] = time.perf_counter() - start_validation
+            result["validation_warnings"] = validation_result.warning_count
+            
+            if not validation_result.is_valid:
+                # Pega primeiro erro para mensagem
+                first_error = validation_result.errors[0] if validation_result.errors else None
+                error_msg = first_error.message if first_error else "Validação falhou"
+                result["error"] = f"Validação: {error_msg}"
+                return result
+            
+            # 3. DataFrame → Parquet
             base_name = os.path.splitext(filename)[0]
             parquet_name = f"{base_name}.parquet"
             parquet_path = os.path.join(TEMP_DIR, f"{file_info['id']}_{parquet_name}")
@@ -311,7 +328,7 @@ class GoogleDriveSource(DataSource):
             df.to_parquet(parquet_path, engine="pyarrow", index=False)
             result["time_transform"] = time.perf_counter() - start
             
-            # Upload: S3
+            # 4. Upload: S3
             start = time.perf_counter()
             s3 = _get_s3_client()
             s3_key = f"raw/clima/year={year}/{parquet_name}"
