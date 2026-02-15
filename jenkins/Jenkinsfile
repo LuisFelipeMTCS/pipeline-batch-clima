@@ -153,6 +153,7 @@ pipeline {
                 subject: "✅ Sucesso no Pipeline: ${env.PROJECT_NAME} #${env.BUILD_NUMBER}",
                 body: """O pipeline rodou com sucesso!
                 Veja os detalhes em: ${env.BUILD_URL}console""",
+                from: "luisfelipetoledo.profissional@gmail.com",
                 to: "luisfelipetoledo.profissional@gmail.com"
             )
         }
@@ -166,6 +167,7 @@ pipeline {
                 subject: "❌ Falha no Pipeline: ${env.PROJECT_NAME} #${env.BUILD_NUMBER}",
                 body: """O pipeline falhou!
                 Verifique os logs em: ${env.BUILD_URL}console""",
+                from: "luisfelipetoledo.profissional@gmail.com",
                 to: "luisfelipetoledo.profissional@gmail.com"
             )
         }
