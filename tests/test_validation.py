@@ -21,7 +21,7 @@ from src.validation.engine import (
 
 class TestNotEmptyRule:
     
-    def test_dataframe_vazio_deve_falhar(self):
+    def test_dataframe_vazio_deve_falhar(self)
         df = pd.DataFrame()
         rule = NotEmptyRule()
         errors = rule.validate(df)
