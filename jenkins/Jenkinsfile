@@ -65,7 +65,7 @@ pipeline {
                 echo '🧪 Rodando testes unitários...'
                 sh '''
                     echo "=== Instalando dependências ==="
-                    python3 -m pip install --quiet --break-system-packages pytest pandas pyarrow boto3 google-auth google-api-python-client
+                    python3 -m pip install --quiet --break-system-packages pytest pandas pyarrow boto3 google-auth google-api-python-client python-dotenv apache-airflow
                     
                     echo ""
                     echo "=== Rodando testes ==="
