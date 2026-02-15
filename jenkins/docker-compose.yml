@@ -1,25 +1,42 @@
+version: '3.8'
+
+# ===========================================
+# Jenkins CI/CD com Docker
+# ===========================================
+#
+# IMPORTANTE: Este Jenkins tem Docker CLI instalado
+# para poder rodar containers durante o pipeline.
+#
+# Para subir:
+#   docker-compose up -d --build
+#
+# Para ver logs:
+#   docker-compose logs -f
+#
+# Senha inicial:
+#   docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+#
+
 services:
   jenkins:
-    image: jenkins/jenkins:lts
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: jenkins
     user: root
     ports:
       - "8085:8080"      # Jenkins UI
       - "50000:50000"    # Jenkins agents
     volumes:
+      # Dados do Jenkins (persiste configs e jobs)
       - jenkins_home:/var/jenkins_home
+      
+      # IMPORTANTE: Monta o socket do Docker para Jenkins poder usar Docker do host
       - /var/run/docker.sock:/var/run/docker.sock
-      - ..:/workspace:ro
+      
     environment:
       - JAVA_OPTS=-Djenkins.install.runSetupWizard=true
-    networks:
-      - airflow_default
     restart: unless-stopped
 
 volumes:
   jenkins_home:
-
-networks:
-  airflow_default:
-    external: true
-    name: pipeline-batch-clima_default
