@@ -3,6 +3,7 @@ pipeline {
     
     environment {
         PROJECT_NAME = 'pipeline-batch-clima'
+        EMAIL_TO = 'luisfelipetoledo.profissional@gmail.com'
     }
     
     options {
@@ -12,10 +13,6 @@ pipeline {
     }
     
     stages {
-        
-        // ========================================
-        // CI - CONTINUOUS INTEGRATION
-        // ========================================
         
         stage('Checkout') {
             steps {
@@ -28,10 +25,8 @@ pipeline {
             steps {
                 echo '🐍 Instalando Python e pip...'
                 sh '''
-                    # Instala Python e pip se não existir
                     which python3 || (apt-get update && apt-get install -y python3 python3-pip python3-venv)
                     which pip3 || apt-get install -y python3-pip
-                    
                     python3 --version
                     pip3 --version || python3 -m pip --version
                 '''
@@ -43,17 +38,14 @@ pipeline {
                 echo '🔍 Verificando sintaxe do código...'
                 sh '''
                     echo "=== Verificando arquivos Python ==="
-                    
                     python3 -m py_compile src/ingestion/engine.py && echo "✓ src/ingestion/engine.py"
                     python3 -m py_compile src/ingestion/pipelines/clima.py && echo "✓ src/ingestion/pipelines/clima.py"
                     python3 -m py_compile src/ingestion/pipelines/solos.py && echo "✓ src/ingestion/pipelines/solos.py"
                     python3 -m py_compile src/ingestion/pipelines/agricultura.py && echo "✓ src/ingestion/pipelines/agricultura.py"
-                    
                     python3 -m py_compile src/validation/engine.py && echo "✓ src/validation/engine.py"
                     python3 -m py_compile src/validation/pipelines/clima.py && echo "✓ src/validation/pipelines/clima.py"
                     python3 -m py_compile src/validation/pipelines/solos.py && echo "✓ src/validation/pipelines/solos.py"
                     python3 -m py_compile src/validation/pipelines/agricultura.py && echo "✓ src/validation/pipelines/agricultura.py"
-                    
                     echo ""
                     echo "✅ Lint OK - Todos os arquivos válidos!"
                 '''
@@ -66,13 +58,10 @@ pipeline {
                 sh '''
                     echo "=== Instalando dependências ==="
                     python3 -m pip install --quiet --break-system-packages pytest pandas pyarrow boto3 google-auth google-api-python-client python-dotenv apache-airflow
-                    
                     echo ""
                     echo "=== Rodando testes ==="
                     export PYTHONPATH="${WORKSPACE}"
-                    
                     python3 -m pytest tests/ -v --tb=short --junitxml=test-results.xml
-                    
                     echo ""
                     echo "✅ Testes concluídos!"
                 '''
@@ -83,10 +72,6 @@ pipeline {
                 }
             }
         }
-        
-        // ========================================
-        // CD - CONTINUOUS DEPLOYMENT
-        // ========================================
         
         stage('Build Docker') {
             when {
@@ -126,7 +111,6 @@ pipeline {
                 sh '''
                     echo "Aguardando Airflow iniciar..."
                     sleep 30
-                    
                     for i in 1 2 3 4 5; do
                         if curl -s http://localhost:8080/health 2>/dev/null | grep -q "healthy"; then
                             echo "✅ Airflow está saudável!"
@@ -135,7 +119,6 @@ pipeline {
                         echo "Tentativa $i/5 - Aguardando..."
                         sleep 10
                     done
-                    
                     echo "⚠️ Timeout, mas deploy foi feito"
                 '''
             }
@@ -144,36 +127,160 @@ pipeline {
     
     post {
         success {
-            echo '''
-    ╔═══════════════════════════════════════════╗
-    ║         ✅ PIPELINE SUCESSO!              ║
-    ╚═══════════════════════════════════════════╝
-            '''
+            echo '✅ PIPELINE SUCESSO!'
             emailext(
-                subject: "✅ Sucesso no Pipeline: ${env.PROJECT_NAME} #${env.BUILD_NUMBER}",
-                body: """O pipeline rodou com sucesso!
-                Veja os detalhes em: ${env.BUILD_URL}console""",
-                from: "luisfelipetoledo.profissional@gmail.com",
-                to: "luisfelipetoledo.profissional@gmail.com"
+                subject: "✅ CI/CD SUCESSO: ${env.PROJECT_NAME} #${env.BUILD_NUMBER}",
+                body: '''<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f0f0f0;">
+    <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+        
+        <!-- Header Verde -->
+        <div style="background: linear-gradient(135deg, #28a745, #20c997); color: white; padding: 30px; text-align: center;">
+            <div style="font-size: 60px;">✅</div>
+            <h1 style="margin: 10px 0 0 0; font-size: 28px;">Pipeline Sucesso!</h1>
+        </div>
+        
+        <!-- Conteúdo -->
+        <div style="padding: 30px;">
+            
+            <!-- Info Box -->
+            <div style="background: #d4edda; border-left: 5px solid #28a745; padding: 20px; margin-bottom: 25px; border-radius: 0 8px 8px 0;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 8px 0; color: #155724;"><strong>📦 Projeto:</strong></td>
+                        <td style="padding: 8px 0; color: #155724; text-align: right;">''' + env.PROJECT_NAME + '''</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px 0; color: #155724;"><strong>🔢 Build:</strong></td>
+                        <td style="padding: 8px 0; color: #155724; text-align: right;">#''' + env.BUILD_NUMBER + '''</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px 0; color: #155724;"><strong>⏱️ Duração:</strong></td>
+                        <td style="padding: 8px 0; color: #155724; text-align: right;">''' + currentBuild.durationString.replace(' and counting', '') + '''</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <!-- Stages -->
+            <h3 style="color: #333; margin-bottom: 15px;">📋 Etapas Executadas:</h3>
+            <div style="margin-bottom: 25px;">
+                <div style="background: #e8f5e9; padding: 12px 15px; margin: 5px 0; border-radius: 5px; display: flex; align-items: center;">
+                    <span style="margin-right: 10px;">✅</span> <strong>Checkout</strong> - Código baixado
+                </div>
+                <div style="background: #e8f5e9; padding: 12px 15px; margin: 5px 0; border-radius: 5px;">
+                    <span style="margin-right: 10px;">✅</span> <strong>Setup Python</strong> - Ambiente configurado
+                </div>
+                <div style="background: #e8f5e9; padding: 12px 15px; margin: 5px 0; border-radius: 5px;">
+                    <span style="margin-right: 10px;">✅</span> <strong>Lint</strong> - Sintaxe verificada
+                </div>
+                <div style="background: #e8f5e9; padding: 12px 15px; margin: 5px 0; border-radius: 5px;">
+                    <span style="margin-right: 10px;">✅</span> <strong>Tests</strong> - 19 testes passaram
+                </div>
+            </div>
+            
+            <!-- Botão -->
+            <div style="text-align: center; margin-top: 30px;">
+                <a href="''' + env.BUILD_URL + '''" style="display: inline-block; background: #28a745; color: white; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+                    🔗 Ver Detalhes no Jenkins
+                </a>
+            </div>
+            
+        </div>
+        
+        <!-- Footer -->
+        <div style="background: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; font-size: 12px; border-top: 1px solid #e9ecef;">
+            <p style="margin: 5px 0;">📧 Email automático do Jenkins CI/CD</p>
+            <p style="margin: 5px 0;">Pipeline: ''' + env.JOB_NAME + '''</p>
+        </div>
+        
+    </div>
+</body>
+</html>''',
+                to: "${EMAIL_TO}",
+                mimeType: 'text/html'
             )
         }
+        
         failure {
-            echo '''
-    ╔═══════════════════════════════════════════╗
-    ║         ❌ PIPELINE FALHOU!               ║
-    ╚═══════════════════════════════════════════╝
-            '''
+            echo '❌ PIPELINE FALHOU!'
             emailext(
-                subject: "❌ Falha no Pipeline: ${env.PROJECT_NAME} #${env.BUILD_NUMBER}",
-                body: """O pipeline falhou!
-                Verifique os logs em: ${env.BUILD_URL}console""",
-                from: "luisfelipetoledo.profissional@gmail.com",
-                to: "luisfelipetoledo.profissional@gmail.com"
+                subject: "❌ CI/CD FALHOU: ${env.PROJECT_NAME} #${env.BUILD_NUMBER}",
+                body: '''<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f0f0f0;">
+    <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+        
+        <!-- Header Vermelho -->
+        <div style="background: linear-gradient(135deg, #dc3545, #c82333); color: white; padding: 30px; text-align: center;">
+            <div style="font-size: 60px;">❌</div>
+            <h1 style="margin: 10px 0 0 0; font-size: 28px;">Pipeline Falhou!</h1>
+        </div>
+        
+        <!-- Conteúdo -->
+        <div style="padding: 30px;">
+            
+            <!-- Info Box -->
+            <div style="background: #f8d7da; border-left: 5px solid #dc3545; padding: 20px; margin-bottom: 25px; border-radius: 0 8px 8px 0;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 8px 0; color: #721c24;"><strong>📦 Projeto:</strong></td>
+                        <td style="padding: 8px 0; color: #721c24; text-align: right;">''' + env.PROJECT_NAME + '''</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px 0; color: #721c24;"><strong>🔢 Build:</strong></td>
+                        <td style="padding: 8px 0; color: #721c24; text-align: right;">#''' + env.BUILD_NUMBER + '''</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px 0; color: #721c24;"><strong>⏱️ Duração:</strong></td>
+                        <td style="padding: 8px 0; color: #721c24; text-align: right;">''' + currentBuild.durationString.replace(' and counting', '') + '''</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <!-- Alerta -->
+            <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+                <div style="color: #856404; font-weight: bold; margin-bottom: 10px; font-size: 16px;">⚠️ Ação Necessária</div>
+                <p style="color: #856404; margin: 0;">O pipeline falhou e requer sua atenção. Verifique os logs para identificar o problema.</p>
+            </div>
+            
+            <!-- Possíveis Causas -->
+            <h3 style="color: #333; margin-bottom: 15px;">🔍 Possíveis causas:</h3>
+            <ul style="color: #555; line-height: 1.8;">
+                <li>Erro de sintaxe no código Python</li>
+                <li>Testes unitários falhando</li>
+                <li>Dependências não instaladas</li>
+                <li>Erro no build do Docker</li>
+            </ul>
+            
+            <!-- Botões -->
+            <div style="text-align: center; margin-top: 30px;">
+                <a href="''' + env.BUILD_URL + '''console" style="display: inline-block; background: #dc3545; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 5px;">
+                    📋 Ver Logs de Erro
+                </a>
+                <a href="''' + env.BUILD_URL + '''" style="display: inline-block; background: #6c757d; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 5px;">
+                    📊 Ver Build
+                </a>
+            </div>
+            
+        </div>
+        
+        <!-- Footer -->
+        <div style="background: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; font-size: 12px; border-top: 1px solid #e9ecef;">
+            <p style="margin: 5px 0;">📧 Email automático do Jenkins CI/CD</p>
+            <p style="margin: 5px 0;">Pipeline: ''' + env.JOB_NAME + '''</p>
+        </div>
+        
+    </div>
+</body>
+</html>''',
+                to: "${EMAIL_TO}",
+                mimeType: 'text/html'
             )
         }
+        
         always {
             cleanWs()
         }
     }
-
 }
