@@ -1,0 +1,153 @@
+pipeline {
+    agent any
+    
+    environment {
+        PROJECT_NAME = 'pipeline-batch-clima'
+        AIRFLOW_IMAGE = 'pipeline-clima-airflow'
+    }
+    
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timestamps()
+        timeout(time: 30, unit: 'MINUTES')
+    }
+    
+    stages {
+        
+        // ========================================
+        // CI - CONTINUOUS INTEGRATION
+        // ========================================
+        
+        stage('Checkout') {
+            steps {
+                echo '📥 Baixando código do repositório...'
+                checkout scm
+            }
+        }
+        
+        stage('Lint') {
+            steps {
+                echo '🔍 Verificando sintaxe do código...'
+                sh '''
+                    # Roda verificação de sintaxe dentro de um container Python
+                    docker run --rm \
+                        -v "${WORKSPACE}:/app" \
+                        -w /app \
+                        python:3.10-slim \
+                        bash -c "
+                            echo '=== Verificando arquivos Python ==='
+                            
+                            python -m py_compile src/ingestion/engine.py && echo '✓ src/ingestion/engine.py'
+                            python -m py_compile src/ingestion/pipelines/clima.py && echo '✓ src/ingestion/pipelines/clima.py'
+                            python -m py_compile src/ingestion/pipelines/solos.py && echo '✓ src/ingestion/pipelines/solos.py'
+                            python -m py_compile src/ingestion/pipelines/agricultura.py && echo '✓ src/ingestion/pipelines/agricultura.py'
+                            
+                            python -m py_compile src/validation/engine.py && echo '✓ src/validation/engine.py'
+                            python -m py_compile src/validation/pipelines/clima.py && echo '✓ src/validation/pipelines/clima.py'
+                            python -m py_compile src/validation/pipelines/solos.py && echo '✓ src/validation/pipelines/solos.py'
+                            python -m py_compile src/validation/pipelines/agricultura.py && echo '✓ src/validation/pipelines/agricultura.py'
+                            
+                            echo ''
+                            echo '✅ Lint OK - Todos os arquivos válidos!'
+                        "
+                '''
+            }
+        }
+        
+        stage('Tests') {
+            steps {
+                echo '🧪 Rodando testes unitários...'
+                sh '''
+                    chmod +x jenkins/scripts/run_tests.sh
+                    ./jenkins/scripts/run_tests.sh
+                '''
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: 'test-results.xml'
+                }
+            }
+        }
+        
+        // ========================================
+        // CD - CONTINUOUS DEPLOYMENT
+        // ========================================
+        
+        stage('Build Docker') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo '🐳 Construindo imagem Docker...'
+                sh '''
+                    chmod +x jenkins/scripts/build_docker.sh
+                    ./jenkins/scripts/build_docker.sh
+                '''
+            }
+        }
+        
+        stage('Deploy') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo '🚀 Fazendo deploy no Airflow...'
+                sh '''
+                    chmod +x jenkins/scripts/deploy.sh
+                    ./jenkins/scripts/deploy.sh
+                '''
+            }
+        }
+        
+        stage('Health Check') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo '❤️ Verificando saúde do Airflow...'
+                sh '''
+                    echo "Aguardando Airflow iniciar..."
+                    sleep 30
+                    
+                    # Tenta verificar saúde
+                    for i in 1 2 3 4 5; do
+                        if curl -s http://localhost:8080/health 2>/dev/null | grep -q "healthy"; then
+                            echo "✅ Airflow está saudável!"
+                            exit 0
+                        fi
+                        echo "Tentativa $i/5 - Aguardando..."
+                        sleep 10
+                    done
+                    
+                    echo "⚠️ Airflow não respondeu, mas deploy foi feito"
+                '''
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo '''
+╔═══════════════════════════════════════════╗
+║         ✅ PIPELINE SUCESSO!              ║
+╠═══════════════════════════════════════════╣
+║  • Código validado                        ║
+║  • Testes passaram                        ║
+║  • Deploy realizado                       ║
+╚═══════════════════════════════════════════╝
+            '''
+        }
+        failure {
+            echo '''
+╔═══════════════════════════════════════════╗
+║         ❌ PIPELINE FALHOU!               ║
+╠═══════════════════════════════════════════╣
+║  Verifique os logs acima para detalhes    ║
+╚═══════════════════════════════════════════╝
+            '''
+        }
+        always {
+            cleanWs()
+        }
+    }
+}

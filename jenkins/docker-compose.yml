@@ -1,0 +1,25 @@
+services:
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: jenkins
+    user: root
+    ports:
+      - "8085:8080"      # Jenkins UI
+      - "50000:50000"    # Jenkins agents
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ..:/workspace:ro
+    environment:
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=true
+    networks:
+      - airflow_default
+    restart: unless-stopped
+
+volumes:
+  jenkins_home:
+
+networks:
+  airflow_default:
+    external: true
+    name: pipeline-batch-clima_default
