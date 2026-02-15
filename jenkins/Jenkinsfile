@@ -145,20 +145,33 @@ pipeline {
     post {
         success {
             echo '''
-╔═══════════════════════════════════════════╗
-║         ✅ PIPELINE SUCESSO!              ║
-╚═══════════════════════════════════════════╝
+    ╔═══════════════════════════════════════════╗
+    ║         ✅ PIPELINE SUCESSO!              ║
+    ╚═══════════════════════════════════════════╝
             '''
+            emailext(
+                subject: "✅ Sucesso no Pipeline: ${env.PROJECT_NAME} #${env.BUILD_NUMBER}",
+                body: """O pipeline rodou com sucesso!
+                Veja os detalhes em: ${env.BUILD_URL}console""",
+                to: "luisfelipetoledo.profissional@gmail.com"
+            )
         }
         failure {
             echo '''
-╔═══════════════════════════════════════════╗
-║         ❌ PIPELINE FALHOU!               ║
-╚═══════════════════════════════════════════╝
+    ╔═══════════════════════════════════════════╗
+    ║         ❌ PIPELINE FALHOU!               ║
+    ╚═══════════════════════════════════════════╝
             '''
+            emailext(
+                subject: "❌ Falha no Pipeline: ${env.PROJECT_NAME} #${env.BUILD_NUMBER}",
+                body: """O pipeline falhou!
+                Verifique os logs em: ${env.BUILD_URL}console""",
+                to: "luisfelipetoledo.profissional@gmail.com"
+            )
         }
         always {
             cleanWs()
         }
     }
+
 }
