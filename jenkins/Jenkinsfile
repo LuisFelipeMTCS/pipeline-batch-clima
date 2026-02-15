@@ -3,7 +3,6 @@ pipeline {
     
     environment {
         PROJECT_NAME = 'pipeline-batch-clima'
-        AIRFLOW_IMAGE = 'pipeline-clima-airflow'
     }
     
     options {
@@ -22,6 +21,10 @@ pipeline {
             steps {
                 echo '📥 Baixando código do repositório...'
                 checkout scm
+                
+                // Debug: lista arquivos
+                sh 'ls -la'
+                sh 'ls -la src/ || echo "src/ não encontrado"'
             }
         }
         
@@ -29,27 +32,33 @@ pipeline {
             steps {
                 echo '🔍 Verificando sintaxe do código...'
                 sh '''
-                    # Roda verificação de sintaxe dentro de um container Python
-                    docker run --rm \
-                        -v "${WORKSPACE}:/app" \
-                        -w /app \
-                        python:3.10-slim \
-                        bash -c "
-                            echo '=== Verificando arquivos Python ==='
-                            
-                            python -m py_compile src/ingestion/engine.py && echo '✓ src/ingestion/engine.py'
-                            python -m py_compile src/ingestion/pipelines/clima.py && echo '✓ src/ingestion/pipelines/clima.py'
-                            python -m py_compile src/ingestion/pipelines/solos.py && echo '✓ src/ingestion/pipelines/solos.py'
-                            python -m py_compile src/ingestion/pipelines/agricultura.py && echo '✓ src/ingestion/pipelines/agricultura.py'
-                            
-                            python -m py_compile src/validation/engine.py && echo '✓ src/validation/engine.py'
-                            python -m py_compile src/validation/pipelines/clima.py && echo '✓ src/validation/pipelines/clima.py'
-                            python -m py_compile src/validation/pipelines/solos.py && echo '✓ src/validation/pipelines/solos.py'
-                            python -m py_compile src/validation/pipelines/agricultura.py && echo '✓ src/validation/pipelines/agricultura.py'
-                            
-                            echo ''
-                            echo '✅ Lint OK - Todos os arquivos válidos!'
-                        "
+                    echo "=== Verificando arquivos Python ==="
+                    echo "Diretório atual: $(pwd)"
+                    echo "Conteúdo:"
+                    ls -la
+                    
+                    echo ""
+                    echo "=== Conteúdo de src/ ==="
+                    ls -la src/ || echo "ERRO: pasta src/ não existe!"
+                    
+                    echo ""
+                    echo "=== Verificando sintaxe com Python ==="
+                    
+                    # Instala Python se não tiver
+                    which python3 || apt-get update && apt-get install -y python3
+                    
+                    python3 -m py_compile src/ingestion/engine.py && echo "✓ src/ingestion/engine.py"
+                    python3 -m py_compile src/ingestion/pipelines/clima.py && echo "✓ src/ingestion/pipelines/clima.py"
+                    python3 -m py_compile src/ingestion/pipelines/solos.py && echo "✓ src/ingestion/pipelines/solos.py"
+                    python3 -m py_compile src/ingestion/pipelines/agricultura.py && echo "✓ src/ingestion/pipelines/agricultura.py"
+                    
+                    python3 -m py_compile src/validation/engine.py && echo "✓ src/validation/engine.py"
+                    python3 -m py_compile src/validation/pipelines/clima.py && echo "✓ src/validation/pipelines/clima.py"
+                    python3 -m py_compile src/validation/pipelines/solos.py && echo "✓ src/validation/pipelines/solos.py"
+                    python3 -m py_compile src/validation/pipelines/agricultura.py && echo "✓ src/validation/pipelines/agricultura.py"
+                    
+                    echo ""
+                    echo "✅ Lint OK - Todos os arquivos válidos!"
                 '''
             }
         }
@@ -58,8 +67,17 @@ pipeline {
             steps {
                 echo '🧪 Rodando testes unitários...'
                 sh '''
-                    chmod +x jenkins/scripts/run_tests.sh
-                    ./jenkins/scripts/run_tests.sh
+                    echo "=== Instalando dependências ==="
+                    pip3 install --quiet pytest pandas pyarrow boto3 apache-airflow google-auth google-api-python-client 2>/dev/null || pip install --quiet pytest pandas pyarrow boto3 apache-airflow google-auth google-api-python-client
+                    
+                    echo ""
+                    echo "=== Rodando testes ==="
+                    export PYTHONPATH="${WORKSPACE}"
+                    
+                    python3 -m pytest tests/ -v --tb=short --junitxml=test-results.xml || python -m pytest tests/ -v --tb=short --junitxml=test-results.xml
+                    
+                    echo ""
+                    echo "✅ Testes concluídos!"
                 '''
             }
             post {
@@ -80,8 +98,9 @@ pipeline {
             steps {
                 echo '🐳 Construindo imagem Docker...'
                 sh '''
-                    chmod +x jenkins/scripts/build_docker.sh
-                    ./jenkins/scripts/build_docker.sh
+                    cd docker
+                    docker build -t pipeline-clima-airflow:latest -f Dockerfile ..
+                    echo "✅ Imagem construída!"
                 '''
             }
         }
@@ -93,8 +112,10 @@ pipeline {
             steps {
                 echo '🚀 Fazendo deploy no Airflow...'
                 sh '''
-                    chmod +x jenkins/scripts/deploy.sh
-                    ./jenkins/scripts/deploy.sh
+                    cd docker
+                    docker-compose down --remove-orphans || true
+                    docker-compose up -d --build
+                    echo "✅ Deploy concluído!"
                 '''
             }
         }
@@ -109,7 +130,6 @@ pipeline {
                     echo "Aguardando Airflow iniciar..."
                     sleep 30
                     
-                    # Tenta verificar saúde
                     for i in 1 2 3 4 5; do
                         if curl -s http://localhost:8080/health 2>/dev/null | grep -q "healthy"; then
                             echo "✅ Airflow está saudável!"
@@ -119,7 +139,7 @@ pipeline {
                         sleep 10
                     done
                     
-                    echo "⚠️ Airflow não respondeu, mas deploy foi feito"
+                    echo "⚠️ Timeout, mas deploy foi feito"
                 '''
             }
         }
@@ -130,10 +150,6 @@ pipeline {
             echo '''
 ╔═══════════════════════════════════════════╗
 ║         ✅ PIPELINE SUCESSO!              ║
-╠═══════════════════════════════════════════╣
-║  • Código validado                        ║
-║  • Testes passaram                        ║
-║  • Deploy realizado                       ║
 ╚═══════════════════════════════════════════╝
             '''
         }
@@ -141,8 +157,6 @@ pipeline {
             echo '''
 ╔═══════════════════════════════════════════╗
 ║         ❌ PIPELINE FALHOU!               ║
-╠═══════════════════════════════════════════╣
-║  Verifique os logs acima para detalhes    ║
 ╚═══════════════════════════════════════════╝
             '''
         }
