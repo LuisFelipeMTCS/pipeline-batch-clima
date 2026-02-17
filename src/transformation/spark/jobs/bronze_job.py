@@ -34,7 +34,7 @@ from pyspark.sql.functions import (
     current_timestamp, trim, lower, regexp_extract,
     coalesce
 )
-from pyspark.sql.types import FloatType, IntegerType
+from pyspark.sql.types import FloatType, IntegerType, StringType
 import os
 import sys
 
@@ -69,43 +69,19 @@ def processar_clima_bronze(spark: SparkSession, input_path: str, output_path: st
     print("="*60)
     
     # =========================================================
-    # PASSO 1: LER O CSV
+    # PASSO 1: LER O PARQUET RAW
     # =========================================================
-    # O arquivo INMET tem 8 linhas de cabeçalho com metadados
-    # Precisamos pular essas linhas
+    # Os dados RAW já foram ingeridos como Parquet com as colunas originais do INMET
     
-    print("\n📖 Lendo arquivo CSV...")
+    print("\n📖 Lendo arquivos Parquet do RAW...")
     
-    # O arquivo INMET tem 8 linhas de metadados que precisamos pular
-    # Vamos ler todo o arquivo e filtrar as linhas de dados
+    # Os arquivos Parquet do RAW agora têm schema consistente (todos STRING)
+    # A ingestão foi ajustada para converter todas as colunas para string
     
-    # Primeiro, ler como texto para pular as 8 primeiras linhas
-    rdd = spark.sparkContext.textFile(input_path)
+    df_raw = spark.read.parquet(input_path)
     
-    # Pegar o header (linha 9 = índice 8)
-    header_line = rdd.zipWithIndex().filter(lambda x: x[1] == 8).map(lambda x: x[0]).first()
-    header = header_line.split(";")
-    
-    # Pegar dados (linhas após a 9)
-    data_rdd = rdd.zipWithIndex().filter(lambda x: x[1] > 8).map(lambda x: x[0])
-    
-    # Converter para DataFrame
-    from pyspark.sql import Row
-    from pyspark.sql.types import StructType, StructField, StringType
-    
-    # Criar schema baseado no header
-    schema = StructType([StructField(col.strip(), StringType(), True) for col in header])
-    
-    # Converter RDD para DataFrame
-    def parse_line(line):
-        parts = line.split(";")
-        # Garantir que temos o mesmo número de colunas que o header
-        while len(parts) < len(header):
-            parts.append(None)
-        return parts[:len(header)]
-    
-    data_rdd = data_rdd.map(parse_line)
-    df_raw = spark.createDataFrame(data_rdd, schema)
+    total = df_raw.count()
+    print(f"   ✅ Leitura concluída: {total} registros")
     
     # Mostrar schema original
     print("\n📋 Schema original:")
@@ -281,17 +257,30 @@ def processar_culturas_bronze(spark: SparkSession, input_path: str, output_path:
     print("🥉 BRONZE: Processando dados de CULTURAS")
     print("="*60)
     
-    # Ler CSV
-    print("\n📖 Lendo arquivo CSV...")
+    # Ler Parquet (agricultura + solos)
+    print("\n📖 Lendo arquivos Parquet do RAW...")
     
-    df_raw = spark.read.csv(
-        input_path,
-        sep=",",
-        header=True,
-        encoding="utf-8"
-    )
+    # Os arquivos Parquet do RAW agora têm schema consistente (todos STRING)
+    # Aceita string única ou tupla de paths
+    if isinstance(input_path, (tuple, list)):
+        # Ler múltiplos paths e fazer union
+        dfs = []
+        for path in input_path:
+            print(f"   Lendo: {path}")
+            df_temp = spark.read.parquet(path)
+            dfs.append(df_temp)
+        
+        # Union de todos os DataFrames
+        df_raw = dfs[0]
+        for df in dfs[1:]:
+            df_raw = df_raw.unionByName(df, allowMissingColumns=True)
+    else:
+        # Path único
+        df_raw = spark.read.parquet(input_path)
     
-    print(f"   Registros lidos: {df_raw.count()}")
+    total = df_raw.count()
+    print(f"   ✅ Leitura concluída: {total} registros")
+    
     df_raw.show(5, truncate=False)
     
     # Padronizar nomes

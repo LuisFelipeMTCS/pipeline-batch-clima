@@ -42,6 +42,7 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/keys/credentials.json
       PYTHONPATH: /opt/airflow
+      SPARK_MASTER: spark://spark-master:7077
     volumes:
       - ../dags:/opt/airflow/dags
       - ../src:/opt/airflow/src
@@ -63,6 +64,7 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/keys/credentials.json
       PYTHONPATH: /opt/airflow
+      SPARK_MASTER: spark://spark-master:7077
     volumes:
       - ../dags:/opt/airflow/dags
       - ../src:/opt/airflow/src
@@ -73,22 +75,42 @@ services:
     restart: unless-stopped
 
   spark-master:
-    image: apache/spark:3.5.0
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
     container_name: spark-master
     command: >
       /opt/spark/bin/spark-class
       org.apache.spark.deploy.master.Master
+    env_file: [../.env]
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+    volumes:
+      - ../src:/opt/spark-app/src
+      - ../dags:/opt/spark-app/dags
     ports:
       - "7077:7077"
       - "8081:8080"
 
   spark-worker:
-    image: apache/spark:3.5.0
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
     container_name: spark-worker
     command: >
       /opt/spark/bin/spark-class
       org.apache.spark.deploy.worker.Worker
       spark://spark-master:7077
+    env_file: [../.env]
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+    volumes:
+      - ../src:/opt/spark-app/src
+      - ../dags:/opt/spark-app/dags
     depends_on:
       - spark-master
 

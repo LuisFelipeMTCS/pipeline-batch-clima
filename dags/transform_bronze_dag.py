@@ -41,8 +41,8 @@ def transformar_raw_to_bronze_clima(**context):
         spark = criar_spark_session("bronze-clima")
         
         # Paths
-        raw_path = "s3://datalake-lab1/raw/clima/*.csv"
-        bronze_path = "s3://datalake-lab1/bronze/clima/"
+        raw_path = "s3a://datalake-lab1/raw/clima/year=*/"
+        bronze_path = "s3a://datalake-lab1/bronze/clima/"
         
         # Processa
         df = processar_clima_bronze(spark, raw_path, bronze_path)
@@ -76,10 +76,12 @@ def transformar_raw_to_bronze_culturas(**context):
         spark = criar_spark_session("bronze-culturas")
         
         # Agrupa agricultura e solos (ambos são culturas)
-        raw_path = "s3://datalake-lab1/raw/agricultura/*.csv,s3://datalake-lab1/raw/solos/*.csv"
-        bronze_path = "s3://datalake-lab1/bronze/culturas/"
+        raw_agricultura = "s3a://datalake-lab1/raw/agricultura/year=*/"
+        raw_solos = "s3a://datalake-lab1/raw/solos/year=*/"
+        bronze_path = "s3a://datalake-lab1/bronze/culturas/"
         
-        df = processar_culturas_bronze(spark, raw_path, bronze_path)
+        # Passar ambos os paths como tupla
+        df = processar_culturas_bronze(spark, (raw_agricultura, raw_solos), bronze_path)
         
         stats = {
             'fonte': 'culturas',

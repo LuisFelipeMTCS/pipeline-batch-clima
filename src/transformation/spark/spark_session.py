@@ -50,14 +50,33 @@ def criar_spark_session(app_name: str = "pipeline-clima-dw") -> SparkSession:
         SparkSession: Sessão configurada e pronta para uso
     """
     
+    # Detectar se está em Docker ou local
+    spark_master = os.getenv("SPARK_MASTER", "local[*]")
+    
+    # Credenciais AWS
+    aws_access_key = os.getenv("AWS_ACCESS_KEY_ID", "")
+    aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+    aws_region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
+    
+    # Caminho dos JARs S3 (em Docker: /home/airflow/.ivy2/jars)
+    jars_path = "/home/airflow/.ivy2/jars/hadoop-aws-3.3.4.jar,/home/airflow/.ivy2/jars/aws-java-sdk-bundle-1.12.262.jar"
+    
     # Criar a sessão Spark
     spark = SparkSession.builder \
         .appName(app_name) \
-        .master("local[*]") \
+        .master(spark_master) \
+        .config("spark.jars", jars_path) \
+        .config("spark.driver.extraClassPath", jars_path) \
+        .config("spark.executor.extraClassPath", jars_path) \
         .config("spark.sql.adaptive.enabled", "true") \
         .config("spark.driver.memory", "2g") \
         .config("spark.sql.shuffle.partitions", "4") \
         .config("spark.sql.legacy.timeParserPolicy", "LEGACY") \
+        .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+        .config("spark.hadoop.fs.s3a.access.key", aws_access_key) \
+        .config("spark.hadoop.fs.s3a.secret.key", aws_secret_key) \
+        .config("spark.hadoop.fs.s3a.endpoint", f"s3.{aws_region}.amazonaws.com") \
+        .config("spark.hadoop.fs.s3a.path.style.access", "false") \
         .getOrCreate()
     
     # Reduzir verbosidade dos logs

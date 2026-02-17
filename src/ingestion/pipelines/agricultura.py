@@ -295,9 +295,8 @@ class GoogleDriveSource(DataSource):
             
             df = pd.read_csv(
                 local_path,
-                sep=";",
-                encoding="latin1",
-                skiprows=8,
+                sep=",",
+                encoding="utf-8",
                 on_bad_lines="skip"
             )
             result["rows"] = len(df)
@@ -314,10 +313,13 @@ class GoogleDriveSource(DataSource):
                 result["error"] = f"Validação: {error_msg}"
                 return result
             
-            # 3. DataFrame → Parquet
+            # 3. DataFrame → Parquet (forçar todos os tipos como STRING para consistência)
             base_name = os.path.splitext(filename)[0]
             parquet_name = f"{base_name}.parquet"
             parquet_path = os.path.join(TEMP_DIR, f"{file_info['id']}_{parquet_name}")
+            
+            # Converter todas as colunas para string (evita incompatibilidade de schema no Spark)
+            df = df.astype(str)
             
             df.to_parquet(parquet_path, engine="pyarrow", index=False)
             result["time_transform"] = time.perf_counter() - start

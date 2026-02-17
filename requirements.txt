@@ -6,3 +6,4 @@ pandas>=2.0.0
 pyarrow>=14.0.0
 requests>=2.31.0
 certifi>=2023.7.0
+pyspark==3.5.0
