@@ -71,6 +71,8 @@ services:
       - ../keys:/opt/airflow/keys
       - ../logs:/opt/airflow/logs
       - ../tmp_ingest:/opt/airflow/tmp_ingest
+    ports:
+      - "4040:4040"  # Spark Application UI (driver em modo client)
     command: scheduler
     restart: unless-stopped
 
