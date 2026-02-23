@@ -356,19 +356,24 @@ def ingest_data(
     send_metrics: bool = True,
     send_success_alert: bool = True,
     send_error_alert: bool = True,
-) -> str:
+) -> Dict[str, Any]:
     """
     Executa ingestão de dados de agricultura.
-    
+
     Args:
         max_workers: Threads paralelas para download
         year_filter: Processa apenas este ano (ex: "2023")
         send_metrics: Envia métricas para CloudWatch
         send_success_alert: Envia email de sucesso
         send_error_alert: Envia email de erro
-    
+
     Returns:
-        String com resumo: "X sucesso | Y erros | Zs"
+        Dicionário com estatísticas da ingestão:
+            - arquivos_baixados: Número de arquivos baixados
+            - arquivos_enviados_s3: Número de arquivos enviados para S3
+            - arquivos_erro: Número de erros
+            - total_linhas: Total de linhas processadas
+            - resumo: String resumida (ex: "5 sucesso | 0 erros | 10.2s")
     """
     config = IngestionConfig(
         pipeline_name="agricultura",
@@ -387,10 +392,47 @@ def ingest_data(
     return engine.run(source)
 
 
+# =========================
+# FUNÇÕES DE WORKFLOW (DAG)
+# =========================
+
+# Reutilizar funções do clima
+from src.ingestion.pipelines.clima import (
+    validar_ingestao as _validar_ingestao_base,
+    enviar_metricas as _enviar_metricas_base,
+    gerar_resumo_final
+)
+
+
+def validar_ingestao(stats: Dict[str, int]) -> Dict[str, Any]:
+    """Valida ingestão de agricultura - wrapper para a função base"""
+    return _validar_ingestao_base(stats)
+
+
+def enviar_metricas(resultado: Dict[str, Any], observability) -> None:
+    """Envia métricas para CloudWatch - wrapper customizado para agricultura"""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    if not resultado:
+        logger.warning("⚠️ Nenhum resultado encontrado para enviar métricas")
+        return
+
+    observability.enviar_metricas(
+        metricas={
+            'ArquivosIngeridos': resultado['total_arquivos'],
+            'IngestaoSucesso': 1
+        },
+        dimensoes={'Camada': 'Raw', 'Fonte': 'Agricultura'}
+    )
+
+    logger.info(f"✅ {resultado['total_arquivos']:,} arquivos ingeridos")
+
+
 if __name__ == "__main__":
     import sys
-    
+
     workers = int(sys.argv[1]) if len(sys.argv) > 1 else MAX_WORKERS
     year = sys.argv[2] if len(sys.argv) > 2 else None
-    
+
     print(ingest_data(max_workers=workers, year_filter=year))

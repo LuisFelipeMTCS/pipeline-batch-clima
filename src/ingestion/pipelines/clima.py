@@ -364,26 +364,31 @@ def ingest_data(
     send_metrics: bool = True,
     send_success_alert: bool = True,
     send_error_alert: bool = True,
-) -> str:
+) -> Dict[str, Any]:
     """
     Executa ingestão de dados climáticos do INMET.
-    
+
     Args:
         max_workers: Threads paralelas para download
         year_filter: Processa apenas este ano (ex: "2023")
         send_metrics: Envia métricas para CloudWatch
         send_success_alert: Envia email de sucesso
         send_error_alert: Envia email de erro
-    
+
     Returns:
-        String com resumo: "X sucesso | Y erros | Zs"
-    
+        Dicionário com estatísticas da ingestão:
+            - arquivos_baixados: Número de arquivos baixados
+            - arquivos_enviados_s3: Número de arquivos enviados para S3
+            - arquivos_erro: Número de erros
+            - total_linhas: Total de linhas processadas
+            - resumo: String resumida (ex: "5 sucesso | 0 erros | 10.2s")
+
     Exemplo:
         # Processa todos os anos
-        ingest_data()
-        
+        stats = ingest_data()
+
         # Processa só 2023
-        ingest_data(year_filter="2023")
+        stats = ingest_data(year_filter="2023")
         
         # Mais rápido, 20 threads
         ingest_data(max_workers=20)
@@ -410,13 +415,312 @@ def ingest_data(
 
 
 # =========================
+# FUNÇÕES DE WORKFLOW (DAG)
+# =========================
+
+def validar_ingestao(stats: Dict[str, int]) -> Dict[str, Any]:
+    """
+    Valida que a ingestão foi bem-sucedida.
+
+    Args:
+        stats: Estatísticas da ingestão (retornadas por ingerir_clima)
+
+    Returns:
+        Resultado da validação com timestamp
+
+    Raises:
+        Exception: Se nenhum arquivo foi enviado ao S3
+    """
+    from datetime import datetime, timezone
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    logger.info("=" * 70)
+    logger.info("✅ VALIDAÇÃO INGESTÃO CLIMA")
+    logger.info("=" * 70)
+    logger.info(f"🌤️  Clima: {stats}")
+    logger.info("=" * 70)
+
+    if not stats or stats.get('arquivos_enviados_s3', 0) == 0:
+        raise Exception("❌ Nenhum arquivo foi enviado ao S3!")
+
+    logger.info(f"✅ Ingestão validada: {stats['arquivos_enviados_s3']:,} arquivos no S3")
+
+    result = {
+        'clima': stats,
+        'total_arquivos': stats.get('arquivos_enviados_s3', 0),
+        'camada': 'raw',
+        'status': 'success',
+        'timestamp': datetime.now(timezone.utc).isoformat()
+    }
+
+    return result
+
+
+def enviar_metricas(resultado: Dict[str, Any], observability) -> None:
+    """
+    Envia métricas para CloudWatch após validação bem-sucedida.
+
+    Args:
+        resultado: Resultado da validação
+        observability: Instância do ObservabilityManager
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    if not resultado:
+        logger.warning("⚠️ Nenhum resultado encontrado para enviar métricas")
+        return
+
+    # Enviar métricas usando ObservabilityManager
+    observability.enviar_metricas(
+        metricas={
+            'ArquivosIngeridos': resultado['total_arquivos'],
+            'IngestaoSucesso': 1
+        },
+        dimensoes={'Camada': 'Raw', 'Fonte': 'Clima'}
+    )
+
+    logger.info(f"✅ {resultado['total_arquivos']:,} arquivos ingeridos")
+
+
+def gerar_resumo_final(
+    ti,
+    dag_run,
+    task_ids: List[str],
+    observability,
+    pipeline_name: str,
+    fonte_emoji: str = "🌤️",
+    fonte_nome: str = "Clima"
+) -> None:
+    """
+    Gera e envia resumo final do pipeline (sucesso ou erro).
+
+    Args:
+        ti: TaskInstance do Airflow
+        dag_run: DagRun do Airflow
+        task_ids: Lista de task_ids para monitorar ['ingest_clima', 'validar_ingestao']
+        observability: Instância do ObservabilityManager
+        pipeline_name: Nome do pipeline (ex: "pipeline_clima")
+        fonte_emoji: Emoji da fonte (ex: "🌤️")
+        fonte_nome: Nome da fonte (ex: "Clima")
+    """
+    from datetime import datetime, timezone
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    # Calcular tempo de execução total
+    start_time = dag_run.start_date
+    end_time = datetime.now(timezone.utc)
+
+    # Garantir que ambos sejam timezone-aware para evitar TypeError
+    if start_time:
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=timezone.utc)
+        duracao_segundos = (end_time - start_time).total_seconds()
+        duracao_minutos = duracao_segundos / 60
+    else:
+        duracao_segundos = 0
+        duracao_minutos = 0
+
+    # Verifica estado de cada task crítica
+    task_states = {}
+    for task_id in task_ids:
+        task_instance = dag_run.get_task_instance(task_id)
+        task_states[task_id] = task_instance.state if task_instance else 'unknown'
+
+    # Determina status geral
+    all_success = all(state == 'success' for state in task_states.values())
+    any_failed = any(state == 'failed' for state in task_states.values())
+
+    if all_success:
+        # Busca resultado da validação
+        resultado = ti.xcom_pull(key='validacao_resultado', task_ids=task_ids[1])  # segundo task_id é validação
+
+        if resultado:
+            # Buscar tempo individual de cada task
+            task_durations = {}
+            for task_id in task_ids:
+                task_instance = dag_run.get_task_instance(task_id)
+                if task_instance and task_instance.start_date and task_instance.end_date:
+                    task_start = task_instance.start_date
+                    task_end = task_instance.end_date
+                    # Garantir timezone-aware
+                    if task_start.tzinfo is None:
+                        task_start = task_start.replace(tzinfo=timezone.utc)
+                    if task_end.tzinfo is None:
+                        task_end = task_end.replace(tzinfo=timezone.utc)
+                    duration = (task_end - task_start).total_seconds() / 60
+                    task_durations[task_id] = duration
+                else:
+                    task_durations[task_id] = 0
+
+            # Informações específicas
+            total_arquivos = resultado['total_arquivos']
+
+            detalhes = {
+                "⏱️ Tempo Total de Execução": f"{duracao_minutos:.2f} minutos",
+                "📦 Total de Arquivos Ingeridos": f"{total_arquivos:,}",
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━": "",
+                f"{fonte_emoji} Ingestão {fonte_nome}": f"✅ {total_arquivos:,} arquivos baixados e enviados ao S3",
+                f"  ⏱️ Tempo Ingestão": f"{task_durations.get(task_ids[0], 0):.2f} minutos",
+                f"  📊 Taxa de Ingestão": f"{total_arquivos / max(task_durations.get(task_ids[0], 1), 0.01):.0f} arquivos/min",
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ": "",
+                "🔍 Validação": f"✅ Concluída",
+                "  ⏱️ Tempo Validação": f"{task_durations.get(task_ids[1], 0):.2f} minutos",
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  ": "",
+                "✅ Status Final": "Sucesso - ingestão concluída"
+            }
+
+            titulo = f"{fonte_nome} OK - {total_arquivos:,} arquivos em {duracao_minutos:.1f}min"
+        else:
+            # Fallback se não encontrou resultado
+            detalhes = {
+                "⏱️ Tempo de execução": f"{duracao_minutos:.2f} minutos",
+                f"{fonte_emoji} Ingestão {fonte_nome}": "✅ Concluído",
+                "✅ Status Final": "Sucesso"
+            }
+            titulo = f"{fonte_nome} OK - {duracao_minutos:.1f}min"
+
+        logger.info(f"📧 Enviando alerta de sucesso: {titulo}")
+
+        # Enviar para CloudWatch Logs
+        observability.enviar_log(
+            mensagem=f"✅ Ingestão {fonte_nome} concluída com sucesso",
+            nivel="INFO",
+            dados={
+                "pipeline": pipeline_name,
+                "status": "success",
+                **detalhes
+            }
+        )
+
+        # Enviar alerta SNS
+        observability.enviar_alerta_sucesso(titulo=titulo, detalhes=detalhes)
+
+    elif any_failed:
+        # Pipeline falhou
+        sucessos = sum(1 for state in task_states.values() if state == 'success')
+        falhas = sum(1 for state in task_states.values() if state == 'failed')
+
+        # Buscar tempo individual de cada task e detalhes
+        task_durations = {}
+        task_details = {}
+
+        for task_id in task_ids:
+            task_instance = dag_run.get_task_instance(task_id)
+            state = task_states.get(task_id, 'unknown')
+
+            # Calcular duração se a task executou
+            if task_instance and task_instance.start_date:
+                task_start = task_instance.start_date
+                task_end = task_instance.end_date or datetime.now(timezone.utc)
+
+                # Garantir timezone-aware
+                if task_start.tzinfo is None:
+                    task_start = task_start.replace(tzinfo=timezone.utc)
+                if task_end.tzinfo is None:
+                    task_end = task_end.replace(tzinfo=timezone.utc)
+
+                duration = (task_end - task_start).total_seconds() / 60
+                task_durations[task_id] = duration
+            else:
+                task_durations[task_id] = 0
+
+            # Status detalhado
+            if state == 'success':
+                status_icon = "✅"
+            elif state == 'failed':
+                status_icon = "❌"
+            else:
+                status_icon = "⚠️"
+
+            task_details[task_id] = {
+                'status': state,
+                'icon': status_icon,
+                'duration': task_durations[task_id]
+            }
+
+        # Buscar estatísticas (se disponível)
+        stats = ti.xcom_pull(key=f'stats_ingestao_{fonte_nome.lower()}', task_ids=task_ids[0])
+
+        detalhes = {
+            "⏱️ Tempo Total até Falha": f"{duracao_minutos:.2f} minutos",
+            "✅ Operações Bem-sucedidas": f"{sucessos} de {len(task_ids)}",
+            "❌ Operações com Falha": f"{falhas} de {len(task_ids)}",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━": "",
+            f"{fonte_emoji} Ingestão {fonte_nome}": f"{task_details[task_ids[0]]['icon']} {task_details[task_ids[0]]['status'].upper()}",
+            "  ⏱️ Tempo Ingestão": f"{task_details[task_ids[0]]['duration']:.2f} minutos",
+        }
+
+        if stats and task_details[task_ids[0]]['status'] == 'success':
+            detalhes["  📦 Arquivos Ingeridos"] = f"{stats.get('arquivos_enviados_s3', 0):,}"
+
+        detalhes.update({
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ": "",
+            "🔍 Validação": f"{task_details[task_ids[1]]['icon']} {task_details[task_ids[1]]['status'].upper()}",
+            "  ⏱️ Tempo Validação": f"{task_details[task_ids[1]]['duration']:.2f} minutos",
+        })
+
+        titulo = f"{fonte_nome} ERRO - {falhas} operação(ões) falhou(aram)"
+
+        logger.info(f"📧 Enviando alerta de erro: {titulo}")
+
+        # Enviar para CloudWatch Logs
+        observability.enviar_log(
+            mensagem=f"❌ Ingestão {fonte_nome} falhou - {falhas} operação(ões) com erro",
+            nivel="ERROR",
+            dados={
+                "pipeline": pipeline_name,
+                "status": "failed",
+                "falhas": falhas,
+                "sucessos": sucessos,
+                **detalhes
+            }
+        )
+
+        # Enviar alerta SNS
+        observability.enviar_alerta_erro(
+            titulo=f"Ingestão {fonte_nome} Falhou",
+            erro=f"{falhas} de {len(task_ids)} operações falharam",
+            contexto=detalhes
+        )
+
+    else:
+        # Estado parcial/desconhecido
+        logger.warning(f"⚠️ Estado parcial do pipeline: {task_states}")
+        detalhes = {
+            "⏱️ Tempo": f"{duracao_minutos:.2f} minutos",
+            "⚠️ Status": "Parcial - algumas tasks não completaram",
+        }
+        for task_id in task_ids:
+            detalhes[task_id] = task_states.get(task_id, 'unknown')
+
+        # Enviar para CloudWatch Logs
+        observability.enviar_log(
+            mensagem="⚠️ Pipeline em estado parcial",
+            nivel="WARNING",
+            dados={
+                "pipeline": pipeline_name,
+                "status": "partial",
+                **detalhes
+            }
+        )
+
+    logger.info("✅ Resumo final enviado com sucesso")
+
+
+# =========================
 # ENTRY POINT
 # =========================
 
 if __name__ == "__main__":
     import sys
-    
+
     workers = int(sys.argv[1]) if len(sys.argv) > 1 else MAX_WORKERS
     year = sys.argv[2] if len(sys.argv) > 2 else None
-    
+
     print(ingest_data(max_workers=workers, year_filter=year))

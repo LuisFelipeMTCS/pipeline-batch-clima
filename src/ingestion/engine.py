@@ -423,16 +423,24 @@ class IngestionEngine:
         self.alerts = None
         self.metrics = None
     
-    def run(self, source: DataSource, file_filter: Optional[callable] = None) -> str:
+    def run(self, source: DataSource, file_filter: Optional[callable] = None) -> Dict[str, Any]:
         """
         Executa ingestão completa.
-        
+
         Args:
             source: Implementação de DataSource
             file_filter: Função opcional para filtrar arquivos (recebe file_info, retorna bool)
-        
+
         Returns:
-            String com resumo da execução
+            Dicionário com estatísticas da execução:
+                - arquivos_baixados: Número de arquivos baixados com sucesso
+                - arquivos_enviados_s3: Número de arquivos enviados para S3
+                - arquivos_erro: Número de arquivos com erro
+                - total_linhas: Total de linhas processadas
+                - total_bytes: Total de bytes processados
+                - tempo_total_segundos: Tempo total de execução
+                - log_url: URL dos logs no CloudWatch
+                - resumo: String resumida (ex: "5 sucesso | 0 erros | 10.2s")
         """
         # Setup
         self.logger = CloudWatchLogsHandler(self.config.log_group).setup()
@@ -484,12 +492,22 @@ class IngestionEngine:
                 self.alerts.alert_error(self.metrics, log_url)
             elif self.metrics.error_count == 0 and self.config.send_success_alert:
                 self.alerts.alert_success(self.metrics, log_url)
-            
-            result = f"{self.metrics.success_count} sucesso | {self.metrics.error_count} erros | {self.metrics.elapsed_time:.1f}s"
-            self.logger.info(f"RESULTADO: {result}")
+
+            result_str = f"{self.metrics.success_count} sucesso | {self.metrics.error_count} erros | {self.metrics.elapsed_time:.1f}s"
+            self.logger.info(f"RESULTADO: {result_str}")
             self.logger.info(f"Logs: {log_url}")
-            
-            return result
+
+            # Retorna dicionário com estatísticas detalhadas
+            return {
+                'arquivos_baixados': self.metrics.success_count,
+                'arquivos_enviados_s3': self.metrics.success_count,
+                'arquivos_erro': self.metrics.error_count,
+                'total_linhas': self.metrics.total_rows_processed,
+                'total_bytes': self.metrics.total_bytes_processed,
+                'tempo_total_segundos': self.metrics.elapsed_time,
+                'log_url': log_url,
+                'resumo': result_str
+            }
             
         except Exception as e:
             error_msg = str(e)
