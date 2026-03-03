@@ -14,10 +14,11 @@ Este projeto implementa um pipeline de dados batch usando Apache Airflow para pr
 O pipeline segue a arquitetura Medallion (Bronze → Silver → Gold):
 
 ```
-┌─────────────┐      ┌─────────────┐      ┌─────────────┐      ┌─────────────┐
-│   Fontes    │──>│  Ingestão   │──>│Transformação│──>│    Load     │
-│  (APIs/GDrive) │      │   (RAW)     │      │(Bronze/Silver/Gold)│      │  (S3/Postgres) │
-└─────────────┘      └─────────────┘      └─────────────┘      └─────────────┘
+┌────────────────┐      ┌──────────────┐      ┌──────────────────┐      ┌──────────────┐
+│    Fontes      │ ──>  │   Ingestão   │ ──>  │  Transformação   │ ──>  │     Load     │
+│  (APIs/GDrive) │      │    (RAW)     │      │ (Bronze/Silver/  │      │ (S3/Postgres)│
+│                │      │              │      │      Gold)       │      │              │
+└────────────────┘      └──────────────┘      └──────────────────┘      └──────────────┘
 ```
 
 ### Camadas:
