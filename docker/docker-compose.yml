@@ -5,12 +5,17 @@ services:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
+    # Variáveis para conexão do dbt
+    # PG_HOST será o nome do serviço: postgres
+    # PG_USER, PG_PASSWORD, PG_DATABASE já definidos acima
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U airflow"]
       interval: 10s
       retries: 5
+    ports:
+      - "5432:5432"
 
   airflow-init:
     build: {context: .., dockerfile: docker/Dockerfile}
@@ -23,6 +28,11 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/keys/credentials.json
       PYTHONPATH: /opt/airflow
+      # Variáveis para o dbt
+      PG_HOST: postgres
+      PG_USER: airflow
+      PG_PASSWORD: airflow
+      PG_DATABASE: airflow
     volumes:
       - ../dags:/opt/airflow/dags
       - ../src:/opt/airflow/src
@@ -43,6 +53,11 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/keys/credentials.json
       PYTHONPATH: /opt/airflow
       SPARK_MASTER: spark://spark-master:7077
+      # Variáveis para o dbt
+      PG_HOST: postgres
+      PG_USER: airflow
+      PG_PASSWORD: airflow
+      PG_DATABASE: airflow
     volumes:
       - ../dags:/opt/airflow/dags
       - ../src:/opt/airflow/src

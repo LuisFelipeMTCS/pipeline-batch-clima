@@ -3,9 +3,19 @@ pipeline_clima:
   outputs:
     dev:
       type: postgres
-      host: localhost
+      host: "{{ env_var('PG_HOST') }}"
+      user: "{{ env_var('PG_USER') }}"
+      password: "{{ env_var('PG_PASSWORD') }}"
       port: 5432
-      user: airflow
-      password: airflow
-      dbname: datalake
-      schema: analytics
+      dbname: "{{ env_var('PG_DATABASE') }}"
+      schema: public
+      threads: 4
+    prod:
+      type: postgres
+      host: "{{ env_var('PG_HOST') }}"
+      user: "{{ env_var('PG_USER') }}"
+      password: "{{ env_var('PG_PASSWORD') }}"
+      port: 5432
+      dbname: "{{ env_var('PG_DATABASE') }}"
+      schema: public
+      threads: 8
