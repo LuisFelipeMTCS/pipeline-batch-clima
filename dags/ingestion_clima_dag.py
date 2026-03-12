@@ -21,7 +21,7 @@ from src.ingestion.pipelines.clima import (
     enviar_metricas
 )
 from src.common.observability import ObservabilityManager
-
+teste aqui
 
 # =========================
 # CONFIGURAÇÕES
