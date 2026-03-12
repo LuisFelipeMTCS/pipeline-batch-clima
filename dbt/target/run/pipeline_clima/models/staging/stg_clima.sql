@@ -1,4 +1,9 @@
-/*
+
+  create view "datalake"."silver"."stg_clima__dbt_tmp"
+    
+    
+  as (
+    /*
   stg_clima.sql
   =============
   O QUE FAZ:
@@ -20,7 +25,7 @@
 
 with source as (
 
-    select * from {{ source('bronze', 'clima') }}
+    select * from "datalake"."bronze"."clima"
 
 ),
 
@@ -65,3 +70,4 @@ deduplicated as (
 )
 
 select * from deduplicated
+  );

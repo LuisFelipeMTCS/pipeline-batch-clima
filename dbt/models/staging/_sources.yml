@@ -1,0 +1,70 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: "Camada Bronze - dados limpos e tipados, carregados do S3 via postgres.py"
+    schema: bronze
+    tables:
+      - name: clima
+        description: "Dados horários do INMET (estação A771 - São Paulo Interlagos)"
+        columns:
+          - name: data
+            description: "Data da medição (yyyy-mm-dd)"
+            tests:
+              - not_null
+          - name: hora_utc
+            description: "Hora em UTC (formato HHMM)"
+          - name: precipitacao_mm
+            description: "Precipitação total na hora (mm)"
+          - name: temperatura_c
+            description: "Temperatura do bulbo seco (°C)"
+          - name: temp_max_c
+            description: "Temperatura máxima na hora (°C)"
+          - name: temp_min_c
+            description: "Temperatura mínima na hora (°C)"
+          - name: umidade_pct
+            description: "Umidade relativa do ar (%)"
+          - name: pressao_mb
+            description: "Pressão atmosférica ao nível da estação (mb)"
+          - name: radiacao_kj_m2
+            description: "Radiação global (KJ/m²)"
+          - name: vento_velocidade_ms
+            description: "Velocidade do vento (m/s)"
+          - name: estacao_codigo
+            description: "Código da estação INMET"
+          - name: estacao_nome
+            description: "Nome da estação INMET"
+          - name: uf
+            description: "Unidade federativa"
+          - name: processado_em
+            description: "Timestamp de processamento pelo Spark (Bronze job)"
+
+      - name: culturas
+        description: "Dados de culturas agrícolas com tolerâncias climáticas"
+        columns:
+          - name: cultura
+            description: "Nome da cultura agrícola"
+            tests:
+              - not_null
+          - name: categoria
+            description: "Categoria da cultura (grão, hortaliça, fruta, etc.)"
+          - name: clima_ideal
+            description: "Faixa de temperatura ideal (ex: '20-35°C; pleno sol')"
+          - name: necessidade_de_agua
+            description: "Necessidade hídrica (Alta, Média, Baixa)"
+          - name: observacoes_praticas
+            description: "Observações sobre tolerâncias e sensibilidades"
+          - name: temp_min_ideal
+            description: "Temperatura mínima ideal extraída (°C)"
+          - name: temp_max_ideal
+            description: "Temperatura máxima ideal extraída (°C)"
+          - name: necessidade_agua_score
+            description: "Score de necessidade de água: 1=Baixa, 2=Média, 3=Alta"
+          - name: tolerante_seca
+            description: "Verdadeiro se a cultura tolera seca"
+          - name: tolerante_frio
+            description: "Verdadeiro se a cultura tolera frio"
+          - name: sensivel_frio
+            description: "Verdadeiro se a cultura é sensível ao frio"
+          - name: sensivel_calor
+            description: "Verdadeiro se a cultura é sensível ao calor"

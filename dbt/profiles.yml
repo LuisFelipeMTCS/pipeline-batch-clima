@@ -3,9 +3,9 @@ pipeline_clima:
   outputs:
     dev:
       type: postgres
-      host: localhost
-      port: 5433
+      host: postgres
+      port: 5432
       user: airflow
       password: airflow
       dbname: datalake
-      schema: analytics
+      schema: silver

@@ -157,7 +157,7 @@ def enviar_resumo_final_wrapper(**context):
 # =========================
 
 with DAG(
-    dag_id='transform_bronze',
+    dag_id='transform_dag',
     default_args=default_args,
     description='Transformação RAW → BRONZE (limpeza e padronização)',
     schedule_interval='@daily',

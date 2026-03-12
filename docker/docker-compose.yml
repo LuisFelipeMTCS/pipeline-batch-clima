@@ -24,6 +24,7 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__SECRET_KEY: "pipeline-clima-secret-key-2024"
       GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/keys/credentials.json
       PYTHONPATH: /opt/airflow
     volumes:
@@ -43,6 +44,7 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__SECRET_KEY: "pipeline-clima-secret-key-2024"
       GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/keys/credentials.json
       PYTHONPATH: /opt/airflow
       SPARK_MASTER: spark://spark-master:7077
@@ -65,6 +67,7 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__SECRET_KEY: "pipeline-clima-secret-key-2024"
       GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/keys/credentials.json
       PYTHONPATH: /opt/airflow
       SPARK_MASTER: spark://spark-master:7077

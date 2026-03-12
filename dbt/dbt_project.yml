@@ -3,3 +3,19 @@ version: '1.0.0'
 config-version: 2
 profile: 'pipeline_clima'
 model-paths: ["models"]
+
+models:
+  pipeline_clima:
+    # Silver: limpeza e agregações (staging + intermediate)
+    staging:
+      +materialized: view
+      +schema: silver
+
+    intermediate:
+      +materialized: table
+      +schema: silver
+
+    # Gold: tabela final de análise de risco climático
+    marts:
+      +materialized: table
+      +schema: gold

@@ -20,7 +20,7 @@
 
 with source as (
 
-    select * from {{ source('bronze', 'clima') }}
+    select * from "datalake"."bronze"."clima"
 
 ),
 
