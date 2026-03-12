@@ -93,9 +93,18 @@ class TestDAGStructureValidation:
                 content = f.read()
 
                 if 'ObservabilityManager(' in content:
-                    # Encontra o bloco do ObservabilityManager
+                    # Encontra o bloco do ObservabilityManager contando parênteses
                     start = content.find('ObservabilityManager(')
-                    end = content.find(')', start)
+                    depth = 0
+                    end = start
+                    for i, c in enumerate(content[start:], start):
+                        if c == '(':
+                            depth += 1
+                        elif c == ')':
+                            depth -= 1
+                            if depth == 0:
+                                end = i
+                                break
                     obs_block = content[start:end+1]
 
                     # Verifica se tem todos os parâmetros
