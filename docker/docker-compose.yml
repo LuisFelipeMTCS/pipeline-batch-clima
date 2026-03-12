@@ -29,6 +29,7 @@ services:
       PYTHONPATH: /opt/airflow
     volumes:
       - ../dags:/opt/airflow/dags
+      - ../dbt:/opt/airflow/dbt
       - ../src:/opt/airflow/src
       - ../keys:/opt/airflow/keys
       - ../logs:/opt/airflow/logs
@@ -50,6 +51,7 @@ services:
       SPARK_MASTER: spark://spark-master:7077
     volumes:
       - ../dags:/opt/airflow/dags
+      - ../dbt:/opt/airflow/dbt
       - ../src:/opt/airflow/src
       - ../keys:/opt/airflow/keys
       - ../logs:/opt/airflow/logs
@@ -73,6 +75,7 @@ services:
       SPARK_MASTER: spark://spark-master:7077
     volumes:
       - ../dags:/opt/airflow/dags
+      - ../dbt:/opt/airflow/dbt
       - ../src:/opt/airflow/src
       - ../keys:/opt/airflow/keys
       - ../logs:/opt/airflow/logs
