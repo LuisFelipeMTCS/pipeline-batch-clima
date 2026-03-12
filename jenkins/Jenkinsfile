@@ -204,6 +204,12 @@ pipeline {
         
         failure {
             echo '❌ PIPELINE FALHOU!'
+            echo '🔄 Revertendo mudanças no workspace...'
+            sh '''
+                git reset --hard HEAD
+                git clean -fd
+                echo "✅ Workspace resetado para o estado original"
+            '''
             emailext(
                 subject: "❌ CI/CD FALHOU: ${env.PROJECT_NAME} #${env.BUILD_NUMBER}",
                 body: '''<!DOCTYPE html>
