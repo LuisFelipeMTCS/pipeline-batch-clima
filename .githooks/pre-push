@@ -8,8 +8,15 @@ echo ""
 # Define PYTHONPATH
 export PYTHONPATH="$(pwd)"
 
+# Detecta python3 ou python
+if command -v python3 &> /dev/null; then
+    PYTHON_CMD=python3
+else
+    PYTHON_CMD=python
+fi
+
 # Roda os testes
-python3 -m pytest tests/ -v --tb=short
+$PYTHON_CMD -m pytest tests/ -v --tb=short
 
 # Captura o exit code
 TEST_EXIT_CODE=$?
