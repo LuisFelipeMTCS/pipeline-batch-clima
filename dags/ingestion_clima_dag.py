@@ -22,7 +22,6 @@ from src.ingestion.pipelines.clima import (
 )
 from src.common.observability import ObservabilityManager
 
-
 # =========================
 # CONFIGURAÇÕES
 # =========================
