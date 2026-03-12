@@ -15,21 +15,36 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 class TestDAGsSyntax:
     """Verifica apenas a sintaxe dos arquivos de DAG."""
-    
-    def test_clima_dag_syntax(self):
-        """Verifica sintaxe do clima_dag.py"""
+
+    def test_ingestion_clima_dag_syntax(self):
+        """Verifica sintaxe do ingestion_clima_dag.py"""
         import py_compile
-        py_compile.compile('dags/clima_dag.py', doraise=True)
-    
-    def test_solos_dag_syntax(self):
-        """Verifica sintaxe do solos_dag.py"""
+        py_compile.compile('dags/ingestion_clima_dag.py', doraise=True)
+
+    def test_ingestion_solos_dag_syntax(self):
+        """Verifica sintaxe do ingestion_solos_dag.py"""
         import py_compile
-        py_compile.compile('dags/solos_dag.py', doraise=True)
-    
-    def test_agricultura_dag_syntax(self):
-        """Verifica sintaxe do agricultura_dag.py"""
+        py_compile.compile('dags/ingestion_solos_dag.py', doraise=True)
+
+    def test_ingestion_agricultura_dag_syntax(self):
+        """Verifica sintaxe do ingestion_agricultura_dag.py"""
         import py_compile
-        py_compile.compile('dags/agricultura_dag.py', doraise=True)
+        py_compile.compile('dags/ingestion_agricultura_dag.py', doraise=True)
+
+    def test_transform_dag_syntax(self):
+        """Verifica sintaxe do transform_dag.py"""
+        import py_compile
+        py_compile.compile('dags/transform_dag.py', doraise=True)
+
+    def test_load_dag_syntax(self):
+        """Verifica sintaxe do load_dag.py"""
+        import py_compile
+        py_compile.compile('dags/load_dag.py', doraise=True)
+
+    def test_dbt_analytics_dag_syntax(self):
+        """Verifica sintaxe do dbt_analytics_dag.py"""
+        import py_compile
+        py_compile.compile('dags/dbt_analytics_dag.py', doraise=True)
 
 
 if __name__ == "__main__":
