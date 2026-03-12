@@ -31,10 +31,7 @@ from src.common.observability import ObservabilityManager
 observability = ObservabilityManager(
     pipeline_name="pipeline_clima",
     namespace=os.getenv("METRIC_NAMESPACE_INGESTAO", "pipeline_ingestao"),
-    log_group=os.getenv("LOG_GROUP_NAME_INGESTAO", "/ingestao/clima"),
-    sns_topic_arn=os.getenv("SNS_ALERT_TOPIC_ARN", ""),
-    aws_region=os.getenv("AWS_DEFAULT_REGION", "us-east-1")
-)
+
 
 
 default_args = {
