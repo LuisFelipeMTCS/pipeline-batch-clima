@@ -49,6 +49,8 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/keys/credentials.json
       PYTHONPATH: /opt/airflow
       SPARK_MASTER: spark://spark-master:7077
+      PG_HOST: postgres
+      PG_PORT: "5432"
     volumes:
       - ../dags:/opt/airflow/dags
       - ../dbt:/opt/airflow/dbt
@@ -73,6 +75,8 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/keys/credentials.json
       PYTHONPATH: /opt/airflow
       SPARK_MASTER: spark://spark-master:7077
+      PG_HOST: postgres
+      PG_PORT: "5432"
     volumes:
       - ../dags:/opt/airflow/dags
       - ../dbt:/opt/airflow/dbt

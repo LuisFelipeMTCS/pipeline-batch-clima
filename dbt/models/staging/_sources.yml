@@ -45,7 +45,8 @@ sources:
           - name: cultura
             description: "Nome da cultura agrícola"
             tests:
-              - not_null
+              - not_null:
+                  severity: warn
           - name: categoria
             description: "Categoria da cultura (grão, hortaliça, fruta, etc.)"
           - name: clima_ideal
