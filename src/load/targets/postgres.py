@@ -18,7 +18,7 @@ import argparse
 import logging
 import boto3
 import pandas as pd
-from io import BytesIO
+from io import BytesIO, StringIO
 from sqlalchemy import create_engine, text
 
 logging.basicConfig(
@@ -58,9 +58,8 @@ def criar_engine():
 
 
 def criar_schema(engine, schema: str = "bronze"):
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
-        conn.commit()
     logger.info(f"Schema '{schema}' pronto.")
 
 
@@ -107,16 +106,27 @@ def carregar_todos_parquets(prefixo: str) -> pd.DataFrame:
 # =========================
 
 def carregar_no_postgres(df: pd.DataFrame, tabela: str, engine, schema: str = "bronze"):
-    logger.info(f"Carregando {len(df):,} registros em {schema}.{tabela}...")
-    df.to_sql(
-        name=tabela,
-        con=engine,
-        schema=schema,
-        if_exists="replace",
-        index=False,
-        chunksize=10_000,
-        method="multi",
-    )
+    total = len(df)
+    logger.info(f"Carregando {total:,} registros em {schema}.{tabela}...")
+    # Create table structure first (empty, no data)
+    with engine.begin() as conn:
+        df.head(0).to_sql(name=tabela, con=conn, schema=schema, if_exists="replace", index=False)
+    # Use PostgreSQL COPY in chunks to avoid OOM with large datasets
+    chunk_size = 500_000
+    raw_conn = engine.raw_connection()
+    try:
+        cursor = raw_conn.cursor()
+        for i in range(0, total, chunk_size):
+            chunk = df.iloc[i:i + chunk_size]
+            buffer = StringIO()
+            chunk.to_csv(buffer, index=False, header=False, na_rep="")
+            buffer.seek(0)
+            cursor.copy_expert(f"COPY {schema}.{tabela} FROM STDIN WITH (FORMAT CSV, NULL '')", buffer)
+            logger.info(f"  Inseridos {min(i + chunk_size, total):,}/{total:,} registros")
+        cursor.close()
+        raw_conn.commit()
+    finally:
+        raw_conn.close()
     logger.info(f"✅ {schema}.{tabela} carregada com sucesso!")
 
 

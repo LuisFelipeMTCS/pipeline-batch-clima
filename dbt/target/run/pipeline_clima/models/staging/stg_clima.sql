@@ -40,8 +40,8 @@ cleaned as (
         -- Dimensão temporal
         CAST(data AS date)                          as data,
         hora_utc,
-        CAST(extract(year  from data) AS int)       as ano,
-        CAST(extract(month from data) AS int)       as mes,
+        CAST(extract(year  from CAST(data AS date)) AS int)       as ano,
+        CAST(extract(month from CAST(data AS date)) AS int)       as mes,
 
         -- Medições climáticas (cast garante tipo float, nulo permanece nulo)
         CAST(precipitacao_mm     AS float)          as precipitacao_mm,
