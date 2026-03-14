@@ -30,9 +30,9 @@ CONCEITOS SPARK USADOS:
 
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import (
-    col, regexp_replace, to_date, when, lit, 
+    col, regexp_replace, to_date, when, lit,
     current_timestamp, trim, lower, regexp_extract,
-    coalesce
+    coalesce, input_file_name
 )
 from pyspark.sql.types import FloatType, IntegerType, StringType
 import os
@@ -213,10 +213,18 @@ def processar_clima_bronze(spark: SparkSession, input_path: str, output_path: st
     
     print("\n📝 Adicionando metadados...")
     
+    # Extract station metadata from filename
+    # Format: INMET_{region}_{UF}_{code}_{name}_{date_range}.parquet
+    # Example: INMET_SE_SP_A771_SAO PAULO - INTERLAGOS_01-01-2025_A_31-12-2025.parquet
     df_bronze = df_cleaned \
-        .withColumn("estacao_codigo", lit("A771")) \
-        .withColumn("estacao_nome", lit("SAO PAULO - INTERLAGOS")) \
-        .withColumn("uf", lit("SP")) \
+        .withColumn("_src", input_file_name()) \
+        .withColumn("uf",
+            regexp_extract(col("_src"), r"INMET_[A-Z]+_([A-Z]{2})_", 1)) \
+        .withColumn("estacao_codigo",
+            regexp_extract(col("_src"), r"INMET_[A-Z]+_[A-Z]{2}_([A-Z]\d+)_", 1)) \
+        .withColumn("estacao_nome",
+            regexp_extract(col("_src"), r"INMET_[A-Z]+_[A-Z]{2}_[A-Z]\d+_(.+?)_\d{2}-\d{2}-\d{4}", 1)) \
+        .drop("_src") \
         .withColumn("processado_em", current_timestamp()) \
         .withColumn("camada", lit("bronze"))
     
