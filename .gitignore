@@ -2,8 +2,15 @@ __pycache__/
 *.pyc
 .env
 keys/
+*.key
+*.pem
+*.crt
+*.json
+credentials*
+secrets*
 logs/
 tmp_ingest/
 data/
 *.parquet
 .venv/
+dbt/profiles.yml
