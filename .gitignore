@@ -14,3 +14,19 @@ data/
 *.parquet
 .venv/
 dbt/profiles.yml
+# Arquivos e pastas "lixo" comuns
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.bak
+*.tmp
+*.log
+*.old
+*.orig
+*.~
+node_modules/
+dist/
+build/
+coverage/
+test-results/
